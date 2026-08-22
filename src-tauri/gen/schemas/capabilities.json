@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"uc-drive2 默认能力：允许拉起 node sidecar 与基本窗口操作","local":true,"windows":["main"],"permissions":["core:default","shell:allow-execute","shell:allow-spawn","shell:allow-kill","shell:allow-stdin-write"]}}

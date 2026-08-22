@@ -1,0 +1,23 @@
+{
+  "name": "uc-drive2-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "uc-drive2 Express 后端：文件管理 + gopeed 离线下载托管",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.1"
+  }
+}

@@ -1,0 +1,39 @@
+# 依赖
+node_modules/
+server/node_modules/
+
+# 构建产物
+dist/
+server-dist/
+src-tauri/target/
+
+# 安装包
+*.exe
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 本地数据（测试残留）
+*.log
+
+# 用户测试数据与临时验证
+ucAuth.txt
+.verify-*
+.diag-*
+.speed-*
+.big-*
+.conn-*
+.tls*
+.header-*
+.throttle-*
+.task-detail.json
+
+# 编辑器与本地
+.vscode/
+.idea/
+*.swp
+
+# 日志与临时
+*.tmp
+npm-debug.log*
