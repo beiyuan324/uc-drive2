@@ -8,7 +8,7 @@ import {
   PhLink as LinkIcon, PhMagnet as MagnetIcon, PhMagnetStraight as TorrentIcon,
   PhPlay as PlayIcon, PhPause as PauseIcon, PhTrash as TrashIcon, PhPlus as PlusIcon,
   PhCheckCircle as CheckIcon, PhWarningCircle as WarnIcon, PhClockClockwise as ClockIcon,
-  PhKey as KeyIcon,
+  PhKey as KeyIcon, PhHourglass as HourglassIcon,
 } from '@phosphor-icons/vue';
 import { useTasksStore } from '@/stores/tasks';
 import { useSettingsStore } from '@/stores/settings';
@@ -135,6 +135,42 @@ function taskLink(t: TaskItem): string | null {
   return t.source_url || null;
 }
 
+/** 任务总大小：UC 分享大小 > 后端记录的 total > 0 */
+function taskTotal(t: TaskItem): number {
+  const uc = (t.metadata?.uc || {}) as Record<string, unknown>;
+  if (typeof uc.size === 'number' && uc.size > 0) return uc.size;
+  if (typeof t.metadata.total === 'number' && t.metadata.total > 0) return t.metadata.total;
+  return 0;
+}
+
+/** 是否处于收尾阶段（最后几个分片，单连接限速，属正常现象） */
+function isFinishing(t: TaskItem): boolean {
+  return t.status === 'running' && t.progress >= 98;
+}
+
+/** 收尾阶段剩余量 */
+function taskRemaining(t: TaskItem): string {
+  const total = taskTotal(t);
+  if (!total || t.status !== 'running') return '';
+  const dl = total * t.progress / 100;
+  const mb = Math.max(0, (total - dl) / 1048576);
+  if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${Math.max(0, Math.round(mb * 1024))} KB`;
+}
+
+/** 剩余时间估算（按当前速度） */
+function taskEta(t: TaskItem): string | null {
+  const total = taskTotal(t);
+  if (!total || t.speed <= 0) return null;
+  const dl = total * t.progress / 100;
+  const sec = Math.max(0, total - dl) / t.speed;
+  if (!Number.isFinite(sec) || sec <= 0 || sec > 3600 * 24) return null;
+  if (sec < 60) return `${Math.ceil(sec)} 秒`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${Math.ceil(sec % 60)} 秒`;
+  return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`;
+}
+
 onMounted(() => {
   tasks.startPolling(2000);
   requestNotifyPermission();
@@ -170,7 +206,14 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
               <n-tag size="small" :type="statusMeta[t.status]?.type" :bordered="false">
                 {{ statusMeta[t.status]?.label || t.status }}
               </n-tag>
-              <span v-if="t.status === 'running'" class="task-speed">{{ formatSpeed(t.speed) }}</span>
+              <span v-if="t.status === 'running' && isFinishing(t)" class="task-finishing">
+                <n-icon :component="HourglassIcon" size="13" />
+                正在收尾 · 剩余约 {{ taskRemaining(t) }}
+              </span>
+              <span v-else-if="t.status === 'running'" class="task-speed">
+                {{ formatSpeed(t.speed) }}
+                <span v-if="taskEta(t)" class="task-eta">约剩 {{ taskEta(t) }}</span>
+              </span>
               <span v-else-if="t.status === 'queued'" class="task-queue-hint">
                 排队中，同时最多 {{ settings.downloadConfig.maxRunning }} 个任务
               </span>
@@ -326,6 +369,18 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
   color: var(--zinc-500);
 }
 .task-speed {
+  color: var(--accent);
+  font-weight: 500;
+}
+.task-eta {
+  color: var(--zinc-400);
+  font-weight: 400;
+  margin-left: 2px;
+}
+.task-finishing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--accent);
   font-weight: 500;
 }

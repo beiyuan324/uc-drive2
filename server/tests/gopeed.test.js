@@ -289,6 +289,20 @@ test('任务服务：速度按 gopeed downloaded 增量计算（不依赖 gopeed
   assert.equal(t.progress, 100, 'downloaded=2048/2048 进度应为 100');
 });
 
+test('任务服务：同步时把任务总大小写入 metadata（前端剩余量/ETA 用）', async () => {
+  const tasks = new TaskService(db, manager);
+  const row = await tasks.create({ source: 'url', url: 'http://example.com/meta.bin' });
+  assert.equal(tasks.get(row.id).metadata.total, undefined);
+  manager._emit({
+    type: 'tasks',
+    tasks: [{ id: row.gopeed_id, name: 'meta.bin', status: 'ready', size: 4096, progress: { speed: 0, downloaded: 512 } }],
+  });
+  await new Promise(r => setTimeout(r, 50));
+  const t = tasks.get(row.id);
+  assert.equal(t.metadata.total, 4096, 'metadata.total 应记录任务总大小');
+  assert.equal(t.progress, 12.5, '进度 = 512/4096 = 12.5%');
+});
+
 test('任务服务：进度用 gopeed downloaded，防止 fsutil VDL 跳变虚高（回归）', async () => {
   // 复现用户 bug：gopeed 先写尾部分片 → NTFS VDL(=最高已写偏移+1) 立即接近 100%，
   // 若用 queryValidData 算进度会虚高卡住；必须用 g.progress.downloaded。

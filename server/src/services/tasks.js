@@ -323,6 +323,14 @@ export class TaskService {
         }
       }
       const total = g.size || g.meta?.res?.size || 0;
+      // 记录任务总大小到 metadata（仅首次，供前端剩余量/剩余时间展示）
+      if (total > 0) {
+        const meta = this._parseMeta(r);
+        if (!meta.total) {
+          meta.total = total;
+          this.db.prepare('UPDATE tasks SET metadata = ? WHERE id = ?').run(JSON.stringify(meta), r.id);
+        }
+      }
       // 真实进度：gopeed 的 progress.downloaded 字段在多连接分片下载时准确（实测与磁盘写入同步），
       // 不要用 fsutil queryValidData —— 其返回值是「最高已写偏移+1」，gopeed 先写尾部分片时
       // 会立刻跳到 ~98%（实测 256MB 文件 0.5s 就报 98.5%），造成进度条虚高卡住。
