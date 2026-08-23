@@ -1,40 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { OFFLINE_DIR, STORAGE_DIR, DATA_DIR } from '../config.js';
 import { normPath, walkFiles, mimeOf, uniquePath } from '../util/fsx.js';
 
 /** 临时 torrent 上传目录（任务创建后即清理） */
 export const TMP_TORRENT_DIR = path.join(DATA_DIR, 'tmp', 'torrents');
-
-/**
- * 统计任务目录中文件的 NTFS 有效数据长度（真实写入字节，排除稀疏文件预分配）。
- * gopeed 下载时预分配完整文件大小，fs.statSync().size 会虚高；
- * 用 fsutil queryValidData 拿真实有效数据。非 Windows 或失败时回退 stat().size。
- */
-function validDataBytes(dir) {
-  let files = [];
-  try {
-    files = walkFiles(dir);
-  } catch {
-    return 0;
-  }
-  if (!files.length) return 0;
-  let total = 0;
-  for (const f of files) {
-    if (process.platform === 'win32') {
-      try {
-        const out = execFileSync('fsutil', ['file', 'queryValidData', f], { encoding: 'utf8', timeout: 3000, windowsHide: true });
-        const m = /0x([0-9a-fA-F]+)/.exec(out);
-        if (m) { total += parseInt(m[1], 16); continue; }
-      } catch { /* 回退 stat */ }
-    }
-    try {
-      total += fs.statSync(f).size;
-    } catch { /* 文件可能被删除 */ }
-  }
-  return total;
-}
 
 /**
  * 离线下载编排：tasks 表为任务记录，gopeed 实际执行。
@@ -353,21 +323,22 @@ export class TaskService {
         }
       }
       const total = g.size || g.meta?.res?.size || 0;
-      // 真实进度：gopeed 的 progress.downloaded 字段不可靠（大文件实测 2GB 时仍显示 0.2MB），
-      // 改用 NTFS 有效数据长度（fsutil queryValidData）统计磁盘真实写入字节。
+      // 真实进度：gopeed 的 progress.downloaded 字段在多连接分片下载时准确（实测与磁盘写入同步），
+      // 不要用 fsutil queryValidData —— 其返回值是「最高已写偏移+1」，gopeed 先写尾部分片时
+      // 会立刻跳到 ~98%（实测 256MB 文件 0.5s 就报 98.5%），造成进度条虚高卡住。
       // done 后文件已登记移出 target_dir，进度固定 100。
-      const validBytes = total > 0 && status !== 'done' ? validDataBytes(r.target_dir) : 0;
-      const progress = status === 'done' ? 100 : total > 0 ? Math.min(100, Math.round(validBytes / total * 1000) / 10) : 0;
+      const downloaded = Math.min(g.progress?.downloaded || 0, total);
+      const progress = status === 'done' ? 100 : total > 0 ? Math.min(100, Math.round(downloaded / total * 1000) / 10) : 0;
       // 速度：gopeed 的 progress.speed 同样不可靠（50MB/s 实速时仅报 56KB/s），
-      // 改为磁盘真实写入字节的增量 / 轮询间隔（2s）估算，准确且与进度同源。
+      // 改为 downloaded 增量的轮询间隔（2s）估算，与进度同源。
       let speed = 0;
       if (status === 'running' && total > 0) {
         const prev = this._speedCache.get(r.id);
         const dtMs = prev ? Date.now() - prev.at : 0;
-        if (prev && dtMs >= 500 && validBytes >= prev.bytes) {
-          speed = Math.round((validBytes - prev.bytes) / (dtMs / 1000));
+        if (prev && dtMs >= 500 && downloaded >= prev.bytes) {
+          speed = Math.round((downloaded - prev.bytes) / (dtMs / 1000));
         }
-        this._speedCache.set(r.id, { bytes: validBytes, at: Date.now() });
+        this._speedCache.set(r.id, { bytes: downloaded, at: Date.now() });
       } else {
         this._speedCache.delete(r.id);
       }

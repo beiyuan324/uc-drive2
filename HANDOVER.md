@@ -77,6 +77,21 @@
 
 **测试**：后端 39 项（38 过 1 跳过）——新增 4 项：并发连接数默认/覆盖、速度增量计算、配置 API（默认值/持久化/maxRunning 应用到 mock gopeed/非法值 500）、POST /api/tasks 透传 connections；前端 24 项全过。冒烟验证：真实启动后端，PUT 配置→gopeed maxRunning=5 生效、非法值 500、CORS 头齐全。
 
+### 7. 进度条虚高修复（fsutil VDL 跳变）+ 任务标题显示文件名（第 3 轮，用户反馈）
+
+**用户反馈 1：进度条一下子到 90 多然后不动**
+- **根因（本地实测定位）**：多连接分片下载时，gopeed 会先写文件尾部的分片，而 `fsutil queryValidData` 返回的是 NTFS VDL（最高已写偏移+1）而非已写字节总数 → 256MB 文件 0.5 秒 VDL 就报 98.5%，之后中间空洞慢慢补，进度条看起来卡住不动
+- **实测数据**：本地限速 Range 服务器（每连接 100KB/s）+ 100 连接：`g.progress.downloaded` 稳步增长（0.5s=6.3MB → 21s=206MB，≈10MB/s 与理论吻合）且与磁盘真实写入同步；`progress.used` 是累计流量（含重试，虚高不可用）；`progress.speed` 仍不可靠
+- **修复**：`_syncFromGopeed` 进度改用 `min(g.progress.downloaded, total)`，速度改用 downloaded 增量估算（不再用 VDL / g.progress.speed）
+- **更正旧结论**：HANDOVER 第 1 轮记载「gopeed progress.downloaded 不可靠（2GB 时显示 0.2MB）」是当时的观察；当前 gopeed 版本实测 downloaded 在多连接分片下准确，fsutil VDL 才是虚高源
+- 新增回归测试「进度用 gopeed downloaded，防止 fsutil VDL 跳变虚高」：预分配 1000B + 只写尾部 1B → 旧代码进度算 100%，新代码按 downloaded=100 算 10%
+
+**用户反馈 2：离线下载页标题应显示文件名**
+- Downloads 任务主标题改为文件名（UC→分享文件名 / URL→链接末段去 query / magnet→「磁力任务」/ torrent→「种子任务」）
+- 直链改为次要辅助行（小字截断 + title 完整链接；UC 任务显示「UC 直链」）
+
+**验证**：端到端（真实后端+gopeed+限速 Range 服务器 256MB/100 连接）——首采样 4.9%（修复前 98.5%）、进度平滑 4.9→12→…→99.3→done 100%、速度 9.3-11.9MB/s 准确、30s 完成。测试：后端 40 项（39 过 1 跳过）、前端 24 项、vue-tsc 零错误。
+
 ---
 
 ## 三、还有哪些没做（TODO / 已知问题）
@@ -104,7 +119,7 @@
 
 ## 四、下次会话怎么做（行动指南）
 
-1. **先跑测试确认基线**：`cd server && npm test`（39 项，38 过 1 跳过网络项）+ `npm run test:unit`（24 项）
+1. **先跑测试确认基线**：`cd server && npm test`（40 项，39 过 1 跳过网络项）+ `npm run test:unit`（24 项）
 2. **UC 功能验证**：确保根目录 `ucAuth.txt` 存在（`[url]` + `[cookie]` 两段），跑 `cd server && node --test tests/uc-e2e.test.js` 验证真实链路（需网络）
 3. **修改后重新打包**：`npx esbuild server/src/index.js --bundle --platform=node --format=cjs --outfile=server-dist/server.js` → `npm run tauri build` → NSIS 覆盖安装（`Start-Process ... -Verb RunAs -Wait`，注意先杀旧实例）
 4. **验证安装版**：启动 → 读 `%APPDATA%/uc-drive2/server.port` → curl health → 看 `%APPDATA%/uc-drive2/access.log` 确认前端请求到达（CORS 是否被拦）
@@ -131,8 +146,8 @@ uc-drive2.exe (Tauri)
 - **gopeed 2s 轮询**（无 WebSocket）
 - **tauri 2.5+ resources 布局**：resources 进 exe 旁 `_up_/`；用对象映射扁平化（`{"../server-dist/server.js":"server.js",...}`）+ Rust `find()` 多布局探测 + `strip_verbatim()` 剥 `\\?\` 前缀
 - **CORS 必须存在**（tauri.localhost → 127.0.0.1 跨域）—— 历史最大坑
-- **UC 进度用 fsutil queryValidData**（gopeed progress.downloaded 不可靠）—— 历史最大坑
-- **UC 速度用 validDataBytes 增量**（g.progress.speed 同样不可靠）—— 第 2 轮
+- **UC 进度用 g.progress.downloaded**（多连接分片下准确；fsutil queryValidData 是 VDL=最高已写偏移，尾部先写会虚高到 98%+ 卡住）—— 第 3 轮用户反馈坑
+- **UC 速度用 downloaded 增量**（g.progress.speed 不可靠）
 - **下载参数存 settings 表**（uc_connections/http_connections/max_running），maxRunning 启动时经 `started` 事件应用到 gopeed
 - **UC 下载 connections 默认 300**（每连接限速 100KB/s，多连接叠加；设置页可调 1..1000）
 - **NSIS-only 打包**（用户要求，MSI/WiX 已清理）

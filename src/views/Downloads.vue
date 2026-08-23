@@ -117,6 +117,24 @@ const statusMeta: Record<string, { label: string; type: 'info' | 'success' | 'wa
   cookie_expired: { label: 'Cookie 失效', type: 'warning', icon: KeyIcon },
 };
 
+/** 任务主标题：文件名（UC 用分享文件名，URL 用链接末段），直链不占主标题 */
+function taskTitle(t: TaskItem): string {
+  const uc = (t.metadata?.uc || {}) as Record<string, string>;
+  if (uc.filename) return uc.filename;
+  if (t.source === 'magnet') return t.source_url?.startsWith('magnet:') ? '磁力任务' : (t.source_url || `任务 ${t.id}`);
+  if (t.source === 'torrent') return (t.metadata as Record<string, { name?: string }>)?.torrentInfo?.name || '种子任务';
+  const clean = t.source_url?.split('?')[0]?.split('/').filter(Boolean).pop();
+  return clean || `任务 ${t.id}`;
+}
+
+/** 次要链接行：直链/源链接截断展示，完整链接放 title */
+function taskLink(t: TaskItem): string | null {
+  if (t.source === 'uc') return 'UC 直链';
+  if (t.source === 'magnet') return t.source_url?.slice(0, 60) || null;
+  if (t.source === 'torrent') return null;
+  return t.source_url || null;
+}
+
 onMounted(() => {
   tasks.startPolling(2000);
   requestNotifyPermission();
@@ -146,7 +164,8 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
             <n-icon :component="statusMeta[t.status]?.icon || ClockIcon" size="22" :color="t.status === 'done' ? 'var(--accent)' : undefined" />
           </div>
           <div class="task-main">
-            <div class="task-name" :title="t.source_url">{{ t.source_url || `任务 #${t.id}` }}</div>
+            <div class="task-name" :title="t.source_url || `任务 #${t.id}`">{{ taskTitle(t) }}</div>
+            <div v-if="taskLink(t)" class="task-link" :title="t.source_url || ''">{{ taskLink(t) }}</div>
             <div class="task-sub">
               <n-tag size="small" :type="statusMeta[t.status]?.type" :bordered="false">
                 {{ statusMeta[t.status]?.label || t.status }}
@@ -288,6 +307,15 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.task-link {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--zinc-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 560px;
 }
 .task-sub {
   display: flex;

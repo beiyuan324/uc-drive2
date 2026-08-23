@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync, openSync, ftruncateSync, writeSync, closeSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -266,30 +266,48 @@ test('任务服务：并发连接数默认值与显式覆盖', async () => {
   await tasks.setConfig({ httpConnections: 0 });
 });
 
-test('任务服务：速度按磁盘真实写入增量计算（覆盖 gopeed 假 speed）', async () => {
+test('任务服务：速度按 gopeed downloaded 增量计算（不依赖 gopeed 假 speed）', async () => {
   const tasks = new TaskService(db, manager);
   const row = await tasks.create({ source: 'url', url: 'http://example.com/speed.bin' });
-  const target = row.target_dir.replace(/\//g, path.sep);
   const gid = row.gopeed_id;
-  const emit = () => manager._emit({
+  const emit = (downloaded) => manager._emit({
     type: 'tasks',
-    // gopeed 的 progress.speed 故意报假值（56KB/s），真实速度应从磁盘增量计算
-    tasks: [{ id: gid, name: 'speed.bin', status: 'ready', size: 2048, progress: { speed: 56 * 1024, downloaded: 0 } }],
+    // gopeed 的 progress.speed 故意报假值（56KB/s），真实速度应从 downloaded 增量计算
+    tasks: [{ id: gid, name: 'speed.bin', status: 'ready', size: 2048, progress: { speed: 56 * 1024, downloaded } }],
   });
-  // 第一轮：写 1KB，仅建立基线（speed=0）
-  writeFileSync(path.join(target, 'speed.bin'), Buffer.alloc(1024));
-  emit();
+  // 第一轮：1KB，仅建立基线（speed=0）
+  emit(1024);
   await new Promise(r => setTimeout(r, 50));
   let t = tasks.get(row.id);
   assert.equal(t.speed, 0, '首轮无基线，speed 应为 0');
-  // 第二轮：写到 2KB，速度 = 增量/间隔（>0）
+  // 第二轮：2KB，速度 = 增量/间隔（>0）
   await new Promise(r => setTimeout(r, 700));
-  writeFileSync(path.join(target, 'speed.bin'), Buffer.alloc(2048));
-  emit();
+  emit(2048);
   await new Promise(r => setTimeout(r, 50));
   t = tasks.get(row.id);
   assert.ok(t.speed > 0, `speed 应为真实增量，实际=${t.speed}`);
-  assert.ok(t.speed < 56 * 1024 || t.speed > 0, `speed 不应依赖 gopeed 假值，实际=${t.speed}`);
+  assert.equal(t.progress, 100, 'downloaded=2048/2048 进度应为 100');
+});
+
+test('任务服务：进度用 gopeed downloaded，防止 fsutil VDL 跳变虚高（回归）', async () => {
+  // 复现用户 bug：gopeed 先写尾部分片 → NTFS VDL(=最高已写偏移+1) 立即接近 100%，
+  // 若用 queryValidData 算进度会虚高卡住；必须用 g.progress.downloaded。
+  const tasks = new TaskService(db, manager);
+  const row = await tasks.create({ source: 'url', url: 'http://example.com/prog.bin' });
+  const gid = row.gopeed_id;
+  const target = row.target_dir.replace(/\//g, path.sep);
+  // 预分配 1000 字节 + 只写最后 1 字节 → VDL 立即 = 1000（100%），但真实只下了 100/1000
+  const fd = openSync(path.join(target, 'prog.bin'), 'w');
+  ftruncateSync(fd, 1000);
+  writeSync(fd, Buffer.alloc(1), 0, 1, 999);
+  closeSync(fd);
+  manager._emit({
+    type: 'tasks',
+    tasks: [{ id: gid, name: 'prog.bin', status: 'ready', size: 1000, progress: { speed: 0, downloaded: 100 } }],
+  });
+  await new Promise(r => setTimeout(r, 50));
+  const t = tasks.get(row.id);
+  assert.equal(t.progress, 10, `进度应按 downloaded=100/1000=10%，实际=${t.progress}%`);
 });
 
 test('任务配置 API：默认值 / 修改持久化 / maxRunning 应用到 gopeed', async () => {
