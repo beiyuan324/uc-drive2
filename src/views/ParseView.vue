@@ -11,10 +11,12 @@ import {
   PhInfo as InfoIcon, PhArrowsClockwise as RetryIcon,
 } from '@phosphor-icons/vue';
 import { api, formatSize } from '@/api';
+import { useSettingsStore } from '@/stores/settings';
 import type { UcFile, UcSession } from '@/types';
 
 const message = useMessage();
 const dialog = useDialog();
+const settings = useSettingsStore();
 
 const shareText = ref('');
 const parsing = ref(false);
@@ -119,6 +121,7 @@ async function downloadOne(f: UcFile) {
       ctoken: active.value.session.ctoken,
       cookies: active.value.session.cookies,
       shareLink: active.value.shareLink,
+      connections: settings.downloadConfig.ucConnections,
     });
     message.success(`已创建任务：${f.name}`);
   } catch (e) {
@@ -165,6 +168,7 @@ async function downloadAll() {
           ctoken: active.value.session.ctoken,
           cookies: active.value.session.cookies,
           shareLink: active.value.shareLink,
+          connections: settings.downloadConfig.ucConnections,
         });
         created += 1;
       } catch (e) {

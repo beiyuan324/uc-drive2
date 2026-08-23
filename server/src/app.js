@@ -80,6 +80,7 @@ export function createApp({ db, gopeed, tasks }) {
       dataDir: DATA_DIR,
       gopeedDir: GOPEED_DIR,
       gopeed: { running: gopeed.ready, port: gopeed.port, base: gopeed.base },
+      download: tasks.getConfig(),
     });
   });
 
@@ -184,9 +185,22 @@ export function createApp({ db, gopeed, tasks }) {
   });
 
   app.post('/api/tasks', async (req, res) => {
-    const { source = 'url', url, torrentId, torrentName } = req.body || {};
-    const task = await tasks.create({ source, url, torrentId, torrentName });
+    const { source = 'url', url, torrentId, torrentName, connections } = req.body || {};
+    const task = await tasks.create({ source, url, torrentId, torrentName, connections });
     res.status(201).json(task);
+  });
+
+  // 下载参数（并发连接数 / 同时下载任务数），持久化到 DB 并应用到 gopeed
+  app.get('/api/tasks/config', (_req, res) => {
+    res.json(tasks.getConfig());
+  });
+
+  app.put('/api/tasks/config', async (req, res) => {
+    const { ucConnections, httpConnections, maxRunning } = req.body || {};
+    if (ucConnections === undefined && httpConnections === undefined && maxRunning === undefined) {
+      return res.status(400).json({ error: '没有可更新的参数' });
+    }
+    res.json(await tasks.setConfig({ ucConnections, httpConnections, maxRunning }));
   });
 
   app.get('/api/tasks', (_req, res) => {
@@ -248,7 +262,7 @@ export function createApp({ db, gopeed, tasks }) {
       retryCount: 0, lastRefreshAt: 0,
     };
     const task = await tasks.create({
-      source: 'uc', url, filename: filename || undefined, headers, uc, connections: connections || 300,
+      source: 'uc', url, filename: filename || undefined, headers, uc, connections,
     });
     res.status(201).json(task);
   });

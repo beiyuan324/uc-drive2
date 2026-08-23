@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, h } from 'vue';
+import { computed, watch, h, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NMenu, NButton, NInput, NSelect, NIcon, NPopover, NEmpty } from 'naive-ui';
 import {
@@ -17,6 +17,10 @@ const route = useRoute();
 const router = useRouter();
 const settings = useSettingsStore();
 const files = useFilesStore();
+
+onMounted(() => {
+  settings.load();
+});
 
 watch(
   () => files.searchQuery,

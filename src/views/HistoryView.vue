@@ -100,6 +100,11 @@ function fmtTime(iso: string | null) {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+function fileName(t: TaskItem): string {
+  const uc = (t.metadata?.uc || {}) as Record<string, string>;
+  return uc.filename || t.source_url?.split('/').pop() || `任务 ${t.id}`;
+}
 </script>
 
 <template>
@@ -133,7 +138,7 @@ function fmtTime(iso: string | null) {
           <tr v-for="t in history" :key="t.id">
             <td>
               <div class="name-cell">
-                <span class="name">{{ t.metadata?.uc?.filename || t.source_url?.split('/').pop() || `任务 ${t.id}` }}</span>
+                <span class="name">{{ fileName(t) }}</span>
               </div>
             </td>
             <td class="muted">{{ t.source === 'uc' ? 'UC 网盘' : t.source.toUpperCase() }}</td>

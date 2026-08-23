@@ -49,12 +49,64 @@ export class TaskService {
   constructor(db, gopeed) {
     this.db = db;
     this.gopeed = gopeed;
+    this._speedCache = new Map();
     gopeed.onEvent(ev => this._onGopeedEvent(ev));
   }
 
   _onGopeedEvent(ev) {
     if (ev.type === 'tasks') this._syncFromGopeed(ev.tasks).catch(() => {});
-    if (ev.type === 'started') this._resumeInterrupted();
+    if (ev.type === 'started') {
+      this._resumeInterrupted();
+      this._applyConfigToGopeed().catch(() => {});
+    }
+  }
+
+  /** 读取下载参数（存 DB settings，重启后保留） */
+  getSetting(key, def) {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    if (!row) return def;
+    const v = Number(row.value);
+    return Number.isFinite(v) ? v : def;
+  }
+
+  setSetting(key, value) {
+    this.db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(key, String(value), now());
+  }
+
+  /** 下载参数：UC 直链连接数 / 普通链接连接数（0=gopeed 默认）/ 同时下载任务数 */
+  getConfig() {
+    return {
+      ucConnections: this.getSetting('uc_connections', 300),
+      httpConnections: this.getSetting('http_connections', 0),
+      maxRunning: this.getSetting('max_running', 3),
+    };
+  }
+
+  /** 保存下载参数并尽量应用到 gopeed（gopeed 未就绪时下次启动再应用） */
+  async setConfig(patch = {}) {
+    const clamp = (v, min, max) => {
+      const n = Math.round(Number(v));
+      if (!Number.isFinite(n)) throw new Error('参数必须是数字');
+      return Math.min(max, Math.max(min, n));
+    };
+    if (patch.ucConnections !== undefined) this.setSetting('uc_connections', clamp(patch.ucConnections, 1, 1000));
+    if (patch.httpConnections !== undefined) this.setSetting('http_connections', clamp(patch.httpConnections, 0, 1000));
+    if (patch.maxRunning !== undefined) this.setSetting('max_running', clamp(patch.maxRunning, 1, 10));
+    await this._applyConfigToGopeed().catch(() => {});
+    return this.getConfig();
+  }
+
+  /** 把 DB 中的 maxRunning 应用到 gopeed 全局配置（gopeed 重启后仍保留） */
+  async _applyConfigToGopeed() {
+    if (!this.gopeed.ready) return;
+    const cfg = await this.gopeed.getConfig();
+    const maxRunning = this.getSetting('max_running', 3);
+    if (cfg.maxRunning !== maxRunning) {
+      await this.gopeed.putConfig({ ...cfg, maxRunning });
+    }
   }
 
   /** gopeed 重启后，把中断任务重新置为运行 */
@@ -148,7 +200,15 @@ export class TaskService {
       const opts = { path: taskDirFinal };
       if (headers && Object.keys(headers).length) req.extra = { header: headers };
       if (filename) opts.name = filename;
-      if (connections) opts.extra = { ...(opts.extra || {}), connections };
+      // 并发连接数：显式传入优先，否则用设置默认（UC 300 / 普通 URL 按 http_connections，0=gopeed 默认）
+      if (connections === undefined) {
+        if (source === 'uc') connections = this.getSetting('uc_connections', 300);
+        else if (source === 'url') connections = this.getSetting('http_connections', 0);
+        else connections = 0;
+      }
+      if (source === 'uc' || source === 'url') {
+        if (connections > 0) opts.extra = { ...(opts.extra || {}), connections };
+      }
       const gid = await this.gopeed.createTask(req, opts);
       this.db.prepare('UPDATE tasks SET gopeed_id = ?, status = ?, updated_at = ? WHERE id = ?').run(gid, 'queued', now(), id);
       return this.get(id);
@@ -298,7 +358,19 @@ export class TaskService {
       // done 后文件已登记移出 target_dir，进度固定 100。
       const validBytes = total > 0 && status !== 'done' ? validDataBytes(r.target_dir) : 0;
       const progress = status === 'done' ? 100 : total > 0 ? Math.min(100, Math.round(validBytes / total * 1000) / 10) : 0;
-      const speed = status === 'done' ? 0 : g.progress?.speed || 0;
+      // 速度：gopeed 的 progress.speed 同样不可靠（50MB/s 实速时仅报 56KB/s），
+      // 改为磁盘真实写入字节的增量 / 轮询间隔（2s）估算，准确且与进度同源。
+      let speed = 0;
+      if (status === 'running' && total > 0) {
+        const prev = this._speedCache.get(r.id);
+        const dtMs = prev ? Date.now() - prev.at : 0;
+        if (prev && dtMs >= 500 && validBytes >= prev.bytes) {
+          speed = Math.round((validBytes - prev.bytes) / (dtMs / 1000));
+        }
+        this._speedCache.set(r.id, { bytes: validBytes, at: Date.now() });
+      } else {
+        this._speedCache.delete(r.id);
+      }
       const patch = { status, progress, speed };
       if (status === 'done') { patch.finished_at = now(); patch.error = ''; }
       if (status === 'error') patch.error = '下载失败';

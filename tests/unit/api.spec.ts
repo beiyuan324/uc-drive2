@@ -67,8 +67,10 @@ describe('api base 探测（启动竞态回归）', () => {
     });
 
     const p = api.listFiles(null);
+    // 先挂上断言再推进时间，避免 promise 提前 reject 触发 unhandled rejection
+    const assertion = expect(p).rejects.toThrow('目录不存在');
     await vi.advanceTimersByTimeAsync(1000);
-    await expect(p).rejects.toThrow('目录不存在');
+    await assertion;
     expect(fileCalls).toBe(1); // 业务请求只发一次，不因 4xx 重试
   });
 });

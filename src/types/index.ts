@@ -62,6 +62,17 @@ export interface SettingsInfo {
   dataDir: string;
   gopeedDir: string;
   gopeed: { running: boolean; port: number | null; base: string | null };
+  download?: DownloadConfig;
+}
+
+/** 下载参数（后端持久化，应用到 gopeed） */
+export interface DownloadConfig {
+  /** UC 直链并发连接数（每连接限速 ~100KB/s，多连接叠加） */
+  ucConnections: number;
+  /** 普通 HTTP 链接并发连接数（0 = 用 gopeed 全局默认） */
+  httpConnections: number;
+  /** 同时下载任务数 */
+  maxRunning: number;
 }
 
 export interface TreeNode {

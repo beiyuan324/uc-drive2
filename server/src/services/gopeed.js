@@ -170,6 +170,15 @@ export class GopeedManager {
     return this._req('GET', '/api/v1/info');
   }
 
+  /** 全局配置（含 maxRunning / protocolConfig） */
+  getConfig() {
+    return this._req('GET', '/api/v1/config');
+  }
+
+  putConfig(cfg) {
+    return this._req('PUT', '/api/v1/config', cfg);
+  }
+
   createTask(req, opts = {}) {
     return this._req('POST', '/api/v1/tasks', { req, opts });
   }

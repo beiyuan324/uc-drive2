@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { NButton, NIcon, NCard, NDescriptions, NDescriptionsItem, NTag, NSpin, NSpace, NInput, NAlert, useMessage } from 'naive-ui';
+import { NButton, NIcon, NCard, NDescriptions, NDescriptionsItem, NTag, NSpin, NSpace, NInput, NInputNumber, NAlert, useMessage } from 'naive-ui';
 import { PhHardDrive as HardDriveIcon, PhDatabase as DatabaseIcon, PhGauge as GaugeIcon, PhInfo as InfoIcon, PhArrowClockwise as RefreshIcon, PhLinkSimple as LinkSimpleIcon, PhFloppyDisk as SaveIcon, PhTrash as TrashIcon } from '@phosphor-icons/vue';
 import { useSettingsStore } from '@/stores/settings';
 import { api, getBase } from '@/api';
@@ -16,6 +16,12 @@ const hasCookie = ref(false);
 const cookieInput = ref('');
 const savingCookie = ref(false);
 
+// 下载参数（本地编辑，保存后提交后端）
+const dlUc = ref(300);
+const dlHttp = ref(0);
+const dlMaxRunning = ref(3);
+const savingDl = ref(false);
+
 async function refreshAll() {
   loading.value = true;
   await Promise.all([
@@ -23,8 +29,27 @@ async function refreshAll() {
     api.health().then(h => (health.value = h)).catch(() => (health.value = null)),
     api.cookieStatus().then(r => (hasCookie.value = r.hasCookie)).catch(() => {}),
   ]);
+  dlUc.value = settings.downloadConfig.ucConnections;
+  dlHttp.value = settings.downloadConfig.httpConnections;
+  dlMaxRunning.value = settings.downloadConfig.maxRunning;
   base.value = await getBase().catch(() => '');
   loading.value = false;
+}
+
+async function saveDownloadParams() {
+  savingDl.value = true;
+  try {
+    await settings.saveDownloadConfig({
+      ucConnections: dlUc.value,
+      httpConnections: dlHttp.value,
+      maxRunning: dlMaxRunning.value,
+    });
+    message.success('下载参数已保存');
+  } catch (e) {
+    message.error((e as Error).message);
+  } finally {
+    savingDl.value = false;
+  }
 }
 
 async function saveCookie() {
@@ -99,6 +124,53 @@ onMounted(refreshAll);
             <n-button size="small" secondary @click="refreshAll">
               <template #icon><n-icon :component="RefreshIcon" /></template>
               刷新状态
+            </n-button>
+          </n-space>
+        </n-card>
+
+        <n-card title="下载参数" class="card">
+          <div class="dl-row">
+            <div class="dl-label">
+              <span class="dl-name">UC 直链并发连接数</span>
+              <span class="dl-desc">UC 直链每连接限速约 100KB/s，多连接可线性叠加。默认 300。</span>
+            </div>
+            <n-input-number
+              v-model:value="dlUc"
+              :min="1"
+              :max="1000"
+              :step="50"
+              class="dl-input"
+            />
+          </div>
+          <div class="dl-row">
+            <div class="dl-label">
+              <span class="dl-name">普通链接并发连接数</span>
+              <span class="dl-desc">适用于普通 HTTP/HTTPS 下载任务；0 表示使用 gopeed 全局默认（500）。</span>
+            </div>
+            <n-input-number
+              v-model:value="dlHttp"
+              :min="0"
+              :max="1000"
+              :step="20"
+              class="dl-input"
+            />
+          </div>
+          <div class="dl-row">
+            <div class="dl-label">
+              <span class="dl-name">同时下载任务数</span>
+              <span class="dl-desc">超过此数量的任务会排队等待，默认 3。</span>
+            </div>
+            <n-input-number
+              v-model:value="dlMaxRunning"
+              :min="1"
+              :max="10"
+              class="dl-input"
+            />
+          </div>
+          <n-space class="actions" justify="end">
+            <n-button size="small" type="primary" secondary :loading="savingDl" @click="saveDownloadParams">
+              <template #icon><n-icon><save-icon /></n-icon></template>
+              保存下载参数
             </n-button>
           </n-space>
         </n-card>
@@ -180,6 +252,35 @@ onMounted(refreshAll);
 }
 .actions {
   margin-top: 12px;
+}
+.dl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--zinc-100);
+}
+.dl-row:last-of-type {
+  border-bottom: none;
+}
+.dl-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dl-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.dl-desc {
+  font-size: 12px;
+  color: var(--zinc-500);
+}
+.dl-input {
+  width: 130px;
+  flex-shrink: 0;
 }
 .cookie-alert {
   margin-bottom: 12px;

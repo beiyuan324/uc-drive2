@@ -1,6 +1,6 @@
 # uc-drive2 交接文档（HANDOVER）
 
-> 最后更新：2026-08-23（第 2 轮交接）
+> 最后更新：2026-08-23（第 2 轮交接 / 下载参数+速度+提醒）
 > 目的：让任何新会话（或隔天继续的会话）无需重读代码即可接续工作。
 
 ---
@@ -54,22 +54,46 @@
 - 测试：后端 34 项全过（新增 CORS 3 项 + UC e2e 2 项）、前端 22 项全过
 - 重新打包 NSIS（02:11 版，42.5MB）并覆盖安装到 `C:\Program Files\uc-drive2`，安装后验证：health/CORS/前端请求到达/UC 链路全部正常
 
+### 6. 下载参数设置 + 速度显示修复 + Cookie 失效提醒 + 排队提示（第 2 轮）
+
+**下载参数设置（用户可调，持久化到 DB）**
+- 后端 `TaskService.getConfig()/setConfig()`：读/写 `settings` 表 `uc_connections`（默认 300）/ `http_connections`（默认 0=gopeed 默认）/ `max_running`（默认 3），数值自动 clamp（1..1000 / 0..1000 / 1..10）
+- `_applyConfigToGopeed()`：把 DB 里的 maxRunning 应用到 gopeed `PUT /api/v1/config`（读原配置→改 maxRunning→写回），gopeed 未就绪时下次 `started` 事件重试
+- `gopeed.js` 新增 `getConfig()/putConfig()`；`app.js` 新增 `GET/PUT /api/tasks/config`，`/api/settings` 返回里并入 `download` 字段
+- `tasks.create()` 连接数优先级：显式传入 > 设置默认（uc→`uc_connections`、url→`http_connections`）；magnet/torrent 不传（gopeed 按协议处理）；`POST /api/tasks` 透传 `connections`
+- 前端：Settings 加「下载参数」卡片（3 个 n-input-number + 保存）；settings store 加 `downloadConfig`/`saveDownloadConfig`，AppLayout 挂载时 `settings.load()` 全局可用；ParseView/Downloads 建任务时带连接数
+
+**下载速度显示修复（`g.progress.speed` 不可靠）**
+- 根因：gopeed 的 `progress.speed` 字段与 `progress.downloaded` 同样不可靠（大文件 50MB/s 实速时仅报 56KB/s）
+- 修复：`_syncFromGopeed` 改为磁盘真实写入增量估算——每任务维护 `_speedCache {bytes, at}`，速度 = (本次 validDataBytes − 上次) / 间隔，与进度同源；首轮无基线 speed=0，paused/done 清缓存
+
+**UC Cookie 失效前台提醒 + 排队提示**
+- Downloads：`cookie_expired` 任务触发 Web Notification + 8s message 引导去「设置」更新（`notifiedCookieIds` 去重）；状态标签改为「Cookie 失效」+ 任务内提示文字
+- Downloads：`queued` 状态显示「排队中，同时最多 N 个任务」；URL 任务创建带 `httpConnections`
+
+**顺带修复**
+- `vue-tsc` 类型错误清零：theme.ts 删掉 naive-ui 不存在的 `common.borderRadiusLarge`（组件级圆角已单独设置）、Downloads/HistoryView 的 `metadata.uc` 类型安全取值、torrent 文件窄化
+- api.spec.ts 修复 pre-existing unhandled rejection（先挂断言再推进计时器）
+
+**测试**：后端 39 项（38 过 1 跳过）——新增 4 项：并发连接数默认/覆盖、速度增量计算、配置 API（默认值/持久化/maxRunning 应用到 mock gopeed/非法值 500）、POST /api/tasks 透传 connections；前端 24 项全过。冒烟验证：真实启动后端，PUT 配置→gopeed maxRunning=5 生效、非法值 500、CORS 头齐全。
+
 ---
 
 ## 三、还有哪些没做（TODO / 已知问题）
 
 ### 功能缺口（相对原版 uc-drive）
-- [ ] **下载参数设置**（原版有：并发连接数/分段数等用户可调项）—— 现在 UC 固定 300 连接、普通 URL 用 gopeed 默认
-- [ ] **UC Cookie 过期提醒到前台**（现在只有任务状态 `cookie_expired`，无主动通知/弹窗引导去设置）
-- [ ] **下载速度显示优化**：`g.progress.speed` 字段同样不可靠（大文件 50MB/s 时显示 56KB/s）；当前 speed 展示偏保守
-- [ ] **多任务并发**：gopeed 全局 `maxRunning: 3`（默认），大量 UC 文件「全部下载」时后进任务排队，无排队提示
+- [x] **下载参数设置**（第 2 轮已做：UC/普通链接并发连接数 + maxRunning，设置页可调，持久化到 DB 并应用到 gopeed）
+- [x] **UC Cookie 过期提醒到前台**（第 2 轮已做：Web Notification + message 引导去设置）
+- [x] **下载速度显示优化**（第 2 轮已做：磁盘真实写入增量计算，与进度同源）
+- [x] **多任务并发**（第 2 轮已做：maxRunning 可调 + 排队提示「同时最多 N 个任务」）
 - [ ] **直链刷新在「下载停滞但未报错」时的检测**：现 `_refreshUcUrl` 只在 gopeed 任务 error 时触发；若 OSS 断流不报错会卡住（当前未遇到，因为直链 16h 有效）
 
 ### 工程改进
 - [ ] `npm run dev` 纯浏览器模式的最终人工确认（vite 代理 /api → 17210）
-- [ ] git 初始化提交（README/.gitignore 已就绪；`*.exe` 已忽略 89MB node.exe + 82MB gopeed.exe；注意 `ucAuth.txt` 已忽略）
+- [x] git 初始化提交（已完成 3 次提交；`*.exe` 已忽略 89MB node.exe + 82MB gopeed.exe；`ucAuth.txt` 已忽略）
 - [ ] `%APPDATA%/uc-drive2/` 里测试残留（"测试目录"、offline/task-* 等）可清理，但用户数据目录不要乱动
 - [ ] 尾部下载慢优化思路：更大 connections（分片更小 → 尾部更快），需实测 800/1000 连接是否触发 OSS 防滥用
+- [ ] 第 2 轮改动后需重新打包 NSIS 覆盖安装验证（含下载参数/速度/提醒）
 
 ### 已知环境注意
 - 已安装版在 `C:\Program Files\uc-drive2`（最新 02:11 包）；旧的 D:\Program Files\uc-drive2 已不存在
@@ -80,7 +104,7 @@
 
 ## 四、下次会话怎么做（行动指南）
 
-1. **先跑测试确认基线**：`cd server && npm test`（34 项）+ `npm run test:unit`（22 项）
+1. **先跑测试确认基线**：`cd server && npm test`（39 项，38 过 1 跳过网络项）+ `npm run test:unit`（24 项）
 2. **UC 功能验证**：确保根目录 `ucAuth.txt` 存在（`[url]` + `[cookie]` 两段），跑 `cd server && node --test tests/uc-e2e.test.js` 验证真实链路（需网络）
 3. **修改后重新打包**：`npx esbuild server/src/index.js --bundle --platform=node --format=cjs --outfile=server-dist/server.js` → `npm run tauri build` → NSIS 覆盖安装（`Start-Process ... -Verb RunAs -Wait`，注意先杀旧实例）
 4. **验证安装版**：启动 → 读 `%APPDATA%/uc-drive2/server.port` → curl health → 看 `%APPDATA%/uc-drive2/access.log` 确认前端请求到达（CORS 是否被拦）
@@ -107,8 +131,10 @@ uc-drive2.exe (Tauri)
 - **gopeed 2s 轮询**（无 WebSocket）
 - **tauri 2.5+ resources 布局**：resources 进 exe 旁 `_up_/`；用对象映射扁平化（`{"../server-dist/server.js":"server.js",...}`）+ Rust `find()` 多布局探测 + `strip_verbatim()` 剥 `\\?\` 前缀
 - **CORS 必须存在**（tauri.localhost → 127.0.0.1 跨域）—— 历史最大坑
-- **UC 进度用 fsutil queryValidData**（gopeed progress.downloaded 不可靠）—— 本次最大坑
-- **UC 下载 connections 默认 300**（每连接限速 100KB/s，多连接叠加）
+- **UC 进度用 fsutil queryValidData**（gopeed progress.downloaded 不可靠）—— 历史最大坑
+- **UC 速度用 validDataBytes 增量**（g.progress.speed 同样不可靠）—— 第 2 轮
+- **下载参数存 settings 表**（uc_connections/http_connections/max_running），maxRunning 启动时经 `started` 事件应用到 gopeed
+- **UC 下载 connections 默认 300**（每连接限速 100KB/s，多连接叠加；设置页可调 1..1000）
 - **NSIS-only 打包**（用户要求，MSI/WiX 已清理）
 - **上下文 278k 自动压缩**（compaction.reserveTokens=722000，用户死命令）
 
@@ -127,6 +153,11 @@ uc-drive2.exe (Tauri)
 
 ### 测试数据
 - `ucAuth.txt`（项目根，已 gitignore）：`[url]` UC 分享链接（碧蓝航线/明日方舟 APK 等）+ `[cookie]`（__pugs=...）—— **用户提供的真实测试数据，勿外泄**
+
+### 下载参数（settings 表，设置页可调）
+- `uc_connections`：UC 直链并发连接数，默认 300（每连接限速 ~100KB/s，多连接叠加），范围 1..1000
+- `http_connections`：普通 HTTP 链接并发连接数，默认 0（= gopeed 全局默认 500），范围 0..1000
+- `max_running`：同时下载任务数，默认 3，范围 1..10（gopeed 全局 `maxRunning`，超出的任务 wait 排队）
 
 ### 打包 / 环境
 - 安装包：`src-tauri/target/release/bundle/nsis/uc-drive2_1.0.0_x64-setup.exe`（42.5MB）

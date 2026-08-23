@@ -14,7 +14,7 @@ export const useTasksStore = defineStore('tasks', () => {
     } catch { /* 后端暂不可达 */ }
   }
 
-  async function create(payload: { source: TaskSource; url?: string; torrentId?: number }) {
+  async function create(payload: { source: TaskSource; url?: string; torrentId?: number; torrentName?: string; connections?: number }) {
     const row = await api.createTask(payload);
     await refresh();
     return row;

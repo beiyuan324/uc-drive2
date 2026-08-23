@@ -13,6 +13,7 @@ const { GopeedManager } = await import('../src/services/gopeed.js');
 const { TaskService } = await import('../src/services/tasks.js');
 const { openDb } = await import('../src/db.js');
 const { STORAGE_DIR } = await import('../src/config.js');
+const { createApp } = await import('../src/app.js');
 
 const noopLog = { log() {}, warn() {}, error() {} };
 
@@ -59,6 +60,13 @@ function startMockGopeed(port, token, store, { crashOn = null } = {}) {
       return;
     }
     if (req.method === 'GET' && u.pathname === '/api/v1/tasks') return respond([...store.values()]);
+    if (req.method === 'GET' && u.pathname === '/api/v1/config') return respond({ maxRunning: 3, protocolConfig: { http: { connections: 500 } } });
+    if (req.method === 'PUT' && u.pathname === '/api/v1/config') {
+      let body = '';
+      req.on('data', c => (body += c));
+      req.on('end', () => { store.set('__config__', JSON.parse(body)); respond(null); });
+      return;
+    }
     const m = u.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/(pause|continue)$/);
     if (req.method === 'PUT' && m) {
       const t = store.get(m[1]);
@@ -79,6 +87,9 @@ let db;
 const store = new Map();
 let manager;
 let servers = [];
+let appServer;
+let httpPort;
+let appTasks;
 
 before(async () => {
   db = openDb();
@@ -98,9 +109,16 @@ before(async () => {
     },
   });
   await manager.start();
+  // 供 HTTP 层测试：共享同一个 TaskService（监听 gopeed 事件）
+  appTasks = new TaskService(db, manager);
+  const app = createApp({ db, gopeed: manager, tasks: appTasks });
+  appServer = http.createServer(app);
+  await new Promise(r => appServer.listen(0, '127.0.0.1', r));
+  httpPort = appServer.address().port;
 });
 
 after(async () => {
+  appServer?.close();
   await manager.stop().catch(() => {});
   for (const s of servers) s.close();
   db.close();
@@ -223,4 +241,100 @@ test('任务服务：临时 torrent 创建后自动清理', async () => {
   assert.ok(!existsSync(tmpFile), '临时 torrent 应被清理');
   // 无效文件名被拒绝
   await assert.rejects(() => tasks.create({ source: 'torrent', torrentName: '不存在.torrent' }), /无效的 torrent 文件/);
+});
+
+test('任务服务：并发连接数默认值与显式覆盖', async () => {
+  const tasks = new TaskService(db, manager);
+  // UC 任务默认 300 连接（设置默认）
+  let row = await tasks.create({ source: 'uc', url: 'http://example.com/uc.bin', filename: 'uc.bin' });
+  let g = store.get(row.gopeed_id);
+  assert.equal(g.meta.opts.extra.connections, 300);
+  // UC 显式覆盖
+  row = await tasks.create({ source: 'uc', url: 'http://example.com/uc2.bin', connections: 800 });
+  g = store.get(row.gopeed_id);
+  assert.equal(g.meta.opts.extra.connections, 800);
+  // 普通 URL：默认不传 connections（交给 gopeed 全局默认）
+  row = await tasks.create({ source: 'url', url: 'http://example.com/u.bin' });
+  g = store.get(row.gopeed_id);
+  assert.equal(g.meta.opts.extra, undefined);
+  // 设置 httpConnections=64 后，URL 任务自动带 64 连接
+  await tasks.setConfig({ httpConnections: 64 });
+  row = await tasks.create({ source: 'url', url: 'http://example.com/u2.bin' });
+  g = store.get(row.gopeed_id);
+  assert.equal(g.meta.opts.extra.connections, 64);
+  // 恢复默认，避免影响后续测试
+  await tasks.setConfig({ httpConnections: 0 });
+});
+
+test('任务服务：速度按磁盘真实写入增量计算（覆盖 gopeed 假 speed）', async () => {
+  const tasks = new TaskService(db, manager);
+  const row = await tasks.create({ source: 'url', url: 'http://example.com/speed.bin' });
+  const target = row.target_dir.replace(/\//g, path.sep);
+  const gid = row.gopeed_id;
+  const emit = () => manager._emit({
+    type: 'tasks',
+    // gopeed 的 progress.speed 故意报假值（56KB/s），真实速度应从磁盘增量计算
+    tasks: [{ id: gid, name: 'speed.bin', status: 'ready', size: 2048, progress: { speed: 56 * 1024, downloaded: 0 } }],
+  });
+  // 第一轮：写 1KB，仅建立基线（speed=0）
+  writeFileSync(path.join(target, 'speed.bin'), Buffer.alloc(1024));
+  emit();
+  await new Promise(r => setTimeout(r, 50));
+  let t = tasks.get(row.id);
+  assert.equal(t.speed, 0, '首轮无基线，speed 应为 0');
+  // 第二轮：写到 2KB，速度 = 增量/间隔（>0）
+  await new Promise(r => setTimeout(r, 700));
+  writeFileSync(path.join(target, 'speed.bin'), Buffer.alloc(2048));
+  emit();
+  await new Promise(r => setTimeout(r, 50));
+  t = tasks.get(row.id);
+  assert.ok(t.speed > 0, `speed 应为真实增量，实际=${t.speed}`);
+  assert.ok(t.speed < 56 * 1024 || t.speed > 0, `speed 不应依赖 gopeed 假值，实际=${t.speed}`);
+});
+
+test('任务配置 API：默认值 / 修改持久化 / maxRunning 应用到 gopeed', async () => {
+  const base = `http://127.0.0.1:${httpPort}`;
+  // 默认值
+  let res = await fetch(`${base}/api/tasks/config`);
+  let cfg = await res.json();
+  assert.equal(cfg.ucConnections, 300);
+  assert.equal(cfg.httpConnections, 0);
+  assert.equal(cfg.maxRunning, 3);
+  // 非法值被拒绝（500）
+  res = await fetch(`${base}/api/tasks/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ucConnections: 'abc' }),
+  });
+  assert.equal(res.status, 500);
+  // 修改并持久化
+  res = await fetch(`${base}/api/tasks/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ucConnections: 600, httpConnections: 40, maxRunning: 4 }),
+  });
+  cfg = await res.json();
+  assert.equal(cfg.ucConnections, 600);
+  assert.equal(cfg.httpConnections, 40);
+  assert.equal(cfg.maxRunning, 4);
+  // gopeed 侧已应用 maxRunning
+  assert.equal(store.get('__config__').maxRunning, 4);
+  // 重新读取仍是新值（DB 持久化）
+  res = await fetch(`${base}/api/tasks/config`);
+  cfg = await res.json();
+  assert.equal(cfg.ucConnections, 600);
+  // 恢复默认
+  await fetch(`${base}/api/tasks/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ucConnections: 300, httpConnections: 0, maxRunning: 3 }),
+  });
+});
+
+test('任务配置 API：POST /api/tasks 透传 connections', async () => {
+  const base = `http://127.0.0.1:${httpPort}`;
+  const res = await fetch(`${base}/api/tasks`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: 'url', url: 'http://example.com/cfg.bin', connections: 70 }),
+  });
+  assert.equal(res.status, 201);
+  const t = await res.json();
+  assert.equal(store.get(t.gopeed_id).meta.opts.extra.connections, 70);
 });

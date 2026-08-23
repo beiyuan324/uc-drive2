@@ -37,7 +37,6 @@ export const lightOverrides: GlobalThemeOverrides = {
     hoverColor: 'rgba(24, 24, 27, 0.04)',
     borderRadius: radius.medium,
     borderRadiusSmall: radius.small,
-    borderRadiusLarge: radius.large,
     fontFamily:
       '"Geist", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, "Segoe UI", sans-serif',
     fontFamilyMono: '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
@@ -81,7 +80,6 @@ export const darkOverrides: GlobalThemeOverrides = {
     hoverColor: 'rgba(228, 228, 231, 0.06)',
     borderRadius: radius.medium,
     borderRadiusSmall: radius.small,
-    borderRadiusLarge: radius.large,
     fontFamily:
       '"Geist", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, "Segoe UI", sans-serif',
     fontFamilyMono: '"Cascadia Code", "JetBrains Mono", Consolas, monospace',

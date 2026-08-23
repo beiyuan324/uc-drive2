@@ -16,10 +16,11 @@ const { createApp } = await import('../src/app.js');
 
 let db, server, port;
 const gopeedStub = { ready: false, port: null, base: null };
+const tasksStub = { getConfig: () => ({ ucConnections: 300, httpConnections: 0, maxRunning: 3 }) };
 
 before(async () => {
   db = openDb();
-  const app = createApp({ db, gopeed: gopeedStub, tasks: {} });
+  const app = createApp({ db, gopeed: gopeedStub, tasks: tasksStub });
   server = http.createServer(app);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   port = server.address().port;

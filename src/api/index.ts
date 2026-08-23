@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { FileNode, SettingsInfo, TaskItem, TaskSource, TreeNode, UcFile, UcParseResult, UcSession } from '@/types';
+import type { DownloadConfig, FileNode, SettingsInfo, TaskItem, TaskSource, TreeNode, UcFile, UcParseResult, UcSession } from '@/types';
 
 /**
  * 后端 API 客户端。
@@ -133,12 +133,17 @@ export const api = {
   tree: () => req<TreeNode[]>('GET', '/api/tree'),
 
   // 任务
-  createTask: (payload: { source: TaskSource; url?: string; torrentId?: number; torrentName?: string }) =>
+  createTask: (payload: { source: TaskSource; url?: string; torrentId?: number; torrentName?: string; connections?: number }) =>
     req<TaskItem>('POST', '/api/tasks', payload),
   listTasks: () => req<TaskItem[]>('GET', '/api/tasks'),
   pauseTask: (id: number) => req<TaskItem>('POST', `/api/tasks/${id}/pause`),
   resumeTask: (id: number) => req<TaskItem>('POST', `/api/tasks/${id}/resume`),
   deleteTask: (id: number, force = false) => req<{ ok: boolean }>('POST', `/api/tasks/${id}/delete`, { force }),
+
+  // 下载参数
+  downloadConfig: () => req<DownloadConfig>('GET', '/api/tasks/config'),
+  saveDownloadConfig: (patch: Partial<DownloadConfig>) =>
+    req<DownloadConfig>('PUT', '/api/tasks/config', patch),
 
   // UC 网盘解析
   ucParse: (shareLink: string, cookie?: string) =>
@@ -148,6 +153,7 @@ export const api = {
   ucDownload: (payload: {
     shareId: string; stoken: string; fid: string; shareFidToken: string;
     filename: string; size: number; ctoken: string; cookies: string; shareLink: string;
+    connections?: number;
   }) => req<TaskItem>('POST', '/api/uc/download', payload),
 
   // UC Cookie
