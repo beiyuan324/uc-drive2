@@ -92,6 +92,23 @@
 
 **验证**：端到端（真实后端+gopeed+限速 Range 服务器 256MB/100 连接）——首采样 4.9%（修复前 98.5%）、进度平滑 4.9→12→…→99.3→done 100%、速度 9.3-11.9MB/s 准确、30s 完成。测试：后端 40 项（39 过 1 跳过）、前端 24 项、vue-tsc 零错误。
 
+### 8. UC 尾部收尾感知（第 4 轮，用户反馈「进度/速度更不对」）
+
+**用户反馈**：下载「明日方舟 官服 8.21 更新.apk」（1.97GB）进度 99.7% 卡住、速度显示 8-20KB/s。
+
+**实测诊断（真实 UC 直链 + 300/1000 连接两组全量下载）**：
+- 进度与速度显示均**准确**（downloaded 增量与磁盘写入同步；用户确认速度准）；尾部慢是 UC 限速本质
+- OSS 动态限速：300 连接实测总速 6.5MB/s（每连接 ~21KB/s，非固定 100KB/s）；used 累计流量 = 下载量的 **180 倍**（362GB vs 1.97GB）——gopeed 分片反复重试（连接被 OSS 重置），浪费带宽且有封禁风险
+- 尾部：99.7%→100% 需 ~60s（速度塌缩到 8-50KB/s，最后 1-2 个分片单连接爬行）；任务最终能 done 且文件校验一致（392s 完成）
+- 实测排除的解法：**更大 connections 无效且更差**（1000 连接 used 443GB、尾部更久；OSS 均分带宽下尾部长短 = 文件大小/总带宽，与连接数无关）、**pause/resume 无效**（不重新调度分片）、删除重建不续传（gopeed 静态分片）
+
+**修复（聚焦感知 + 数据支撑）**：
+- 后端 `_syncFromGopeed` 首次同步时把任务总大小写入 `metadata.total`（UC 任务本身有 metadata.uc.size）
+- 前端 Downloads：running 且 progress≥98% 显示「正在收尾 · 剩余约 X」（替代吓人的低速度数字）；其余阶段显示速度 + 剩余时间估算（ETA）
+- 默认 connections 保持 300（实测最优）
+
+**测试**：后端 41 项（40 过 1 跳过，新增 metadata.total 写入项）、前端 24 项、vue-tsc 零错误。打包 17:45 版覆盖安装（安装后曾发现上轮遗留孤儿 node/gopeed 进程，已清理，仅留单实例）。
+
 ---
 
 ## 三、还有哪些没做（TODO / 已知问题）
@@ -119,7 +136,7 @@
 
 ## 四、下次会话怎么做（行动指南）
 
-1. **先跑测试确认基线**：`cd server && npm test`（40 项，39 过 1 跳过网络项）+ `npm run test:unit`（24 项）
+1. **先跑测试确认基线**：`cd server && npm test`（41 项，40 过 1 跳过网络项）+ `npm run test:unit`（24 项）
 2. **UC 功能验证**：确保根目录 `ucAuth.txt` 存在（`[url]` + `[cookie]` 两段），跑 `cd server && node --test tests/uc-e2e.test.js` 验证真实链路（需网络）
 3. **修改后重新打包**：`npx esbuild server/src/index.js --bundle --platform=node --format=cjs --outfile=server-dist/server.js` → `npm run tauri build` → NSIS 覆盖安装（`Start-Process ... -Verb RunAs -Wait`，注意先杀旧实例）
 4. **验证安装版**：启动 → 读 `%APPDATA%/uc-drive2/server.port` → curl health → 看 `%APPDATA%/uc-drive2/access.log` 确认前端请求到达（CORS 是否被拦）
@@ -148,6 +165,8 @@ uc-drive2.exe (Tauri)
 - **CORS 必须存在**（tauri.localhost → 127.0.0.1 跨域）—— 历史最大坑
 - **UC 进度用 g.progress.downloaded**（多连接分片下准确；fsutil queryValidData 是 VDL=最高已写偏移，尾部先写会虚高到 98%+ 卡住）—— 第 3 轮用户反馈坑
 - **UC 速度用 downloaded 增量**（g.progress.speed 不可靠）
+- **UC 尾部慢 = 限速本质，无解**：OSS 均分带宽下尾部时长 = 文件大小/总带宽（300/1000 连接实测一致）；resume 无效；已做前端「正在收尾」提示
+- **gopeed used 字段 = 累计流量（含重试）**，可达下载量 180 倍，仅作重试诊断用
 - **下载参数存 settings 表**（uc_connections/http_connections/max_running），maxRunning 启动时经 `started` 事件应用到 gopeed
 - **UC 下载 connections 默认 300**（每连接限速 100KB/s，多连接叠加；设置页可调 1..1000）
 - **NSIS-only 打包**（用户要求，MSI/WiX 已清理）
