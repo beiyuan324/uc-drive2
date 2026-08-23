@@ -93,7 +93,7 @@
 - [x] git 初始化提交（已完成 3 次提交；`*.exe` 已忽略 89MB node.exe + 82MB gopeed.exe；`ucAuth.txt` 已忽略）
 - [ ] `%APPDATA%/uc-drive2/` 里测试残留（"测试目录"、offline/task-* 等）可清理，但用户数据目录不要乱动
 - [ ] 尾部下载慢优化思路：更大 connections（分片更小 → 尾部更快），需实测 800/1000 连接是否触发 OSS 防滥用
-- [ ] 第 2 轮改动后需重新打包 NSIS 覆盖安装验证（含下载参数/速度/提醒）
+- [x] 第 2 轮改动已重新打包 NSIS（15:13 版，42.5MB）并覆盖安装到 `C:\Program Files\uc-drive2`，安装后验证：health/CORS/前端请求到达/`/api/tasks/config` 全部正常
 
 ### 已知环境注意
 - 已安装版在 `C:\Program Files\uc-drive2`（最新 02:11 包）；旧的 D:\Program Files\uc-drive2 已不存在
