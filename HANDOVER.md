@@ -101,6 +101,10 @@
 5. **文件页中文按钮占满** → 工具栏（返回/新建目录/上传）改纯图标+tooltip，列表行操作（打开/预览/下载/重命名/删除）改图标按钮
 6. **设置页废话多** → 删「架构」「技术说明」「端口占用策略」「存储 hint」，关于只留版本
 
+**深色/浅色/跟随系统选择无效（第 7 轮）** → 根因：App.vue/AppLayout.vue 的 `isDark` computed 直接读 `document.documentElement.dataset.theme`（普通 DOM 属性，非 Vue 响应式依赖），求值一次后永不失效，切换选择不触发重渲染。修复：settings store 新增响应式 `systemDark` ref + `isDark` computed（由 `themeMode` + `systemDark` 推导），组件改为消费 store 的 `isDark`；挂载前同步 `data-theme` 避免浅色闪屏。回归测试 2 项（isDark 响应式翻转、auto 跟随系统）。
+
+**图标全面替换（第 8 轮）**：用户提供 wenjianjia.ico/wenjian.png（均不透明背景），用亮度键控抠出透明背景生成多尺寸 ico（16~256）+ 全套 PNG。**坑：tauri-build 不声明图标文件的 rerun-if-changed，换 ico 后旧图标一直嵌在 exe 里** → build.rs 显式声明 `cargo:rerun-if-changed=icons/*`。验证：exe 图标与新 32x32 帧逐像素一致。
+
 **测试**：前端 24 项全过、vue-tsc 零错误、cargo check 通过。
 
 ### 9. 下载失败「下载失败」无因可查 → 根因：UC Cookie 过期 + 错误分类失效（第 5 轮，用户反馈）
