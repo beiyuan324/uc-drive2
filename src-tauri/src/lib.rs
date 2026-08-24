@@ -37,6 +37,22 @@ fn kill_backend(pid: u32) {
         .status();
 }
 
+// 强杀自身：std::process::exit(0) 仍会走 CRT 的 atexit / 静态析构 / DLL detach
+// （msedgewebview2.dll 等卸载时实测仍可卡数秒）。TerminateProcess 跳过一切清理，
+// 进程立即消失，无窗体闪烁；后端已在调用前用 taskkill 杀掉，不会产生孤儿。
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetCurrentProcess() -> *mut std::ffi::c_void;
+    fn TerminateProcess(process: *mut std::ffi::c_void, exit_code: u32) -> i32;
+}
+fn force_exit(code: u32) -> ! {
+    unsafe {
+        TerminateProcess(GetCurrentProcess(), code);
+    }
+    // TerminateProcess 成功后不会返回；极端失败时兜底退出
+    std::process::exit(code as i32)
+}
+
 struct BackendChild {
     pid: u32,
 }
@@ -71,12 +87,12 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                 }
             }
             "quit" => {
-                // app.exit(0) 在 Windows 上会等 WebView2 清理（可卡数秒），且隐藏窗口销毁时可能闪一下窗体。
-                // 改为：先杀后端进程树，再立即强退，彻底规避卡顿与窗体闪烁。
+                // 先杀后端进程树（taskkill 实测 ~50ms），再 TerminateProcess 强杀自身，
+                // 彻底规避 WebView2/CRT 清理卡顿与窗体闪烁。
                 if let Some(child) = app.try_state::<BackendChild>() {
                     kill_backend(child.pid);
                 }
-                std::process::exit(0);
+                force_exit(0);
             }
             _ => {}
         })
