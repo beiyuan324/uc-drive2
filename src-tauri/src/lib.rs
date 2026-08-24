@@ -31,26 +31,62 @@ fn get_server_port() -> Result<u16, String> {
     Err("后端端口文件未就绪".into())
 }
 
-fn kill_backend(pid: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .status();
-}
-
 // 强杀自身：std::process::exit(0) 仍会走 CRT 的 atexit / 静态析构 / DLL detach
 // （msedgewebview2.dll 等卸载时实测仍可卡数秒）。TerminateProcess 跳过一切清理，
-// 进程立即消失，无窗体闪烁；后端已在调用前用 taskkill 杀掉，不会产生孤儿。
+// 进程立即消失，无窗体闪烁；后端已在调用前杀掉，不会产生孤儿。
 #[link(name = "kernel32")]
 unsafe extern "system" {
+    fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> *mut std::ffi::c_void;
     fn GetCurrentProcess() -> *mut std::ffi::c_void;
     fn TerminateProcess(process: *mut std::ffi::c_void, exit_code: u32) -> i32;
+    fn CloseHandle(object: *mut std::ffi::c_void) -> i32;
 }
+const PROCESS_TERMINATE: u32 = 0x0001;
+
 fn force_exit(code: u32) -> ! {
     unsafe {
         TerminateProcess(GetCurrentProcess(), code);
     }
     // TerminateProcess 成功后不会返回；极端失败时兜底退出
     std::process::exit(code as i32)
+}
+
+/// 直接强杀指定 pid（尽力而为：进程不存在/权限不足时静默失败）
+fn terminate_pid(pid: u32) {
+    unsafe {
+        let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if !h.is_null() {
+            TerminateProcess(h, 1);
+            CloseHandle(h);
+        }
+    }
+}
+
+fn backend_state_path() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
+    PathBuf::from(appdata).join("uc-drive2").join("backend-state.json")
+}
+
+/// 杀后端：直接 TerminateProcess node（sidecar pid）+ 读后端状态文件杀 gopeed，
+/// 零等待零外部依赖；另 spawn 一个不等待的 taskkill /T 兜底清理可能的孙进程。
+/// （历史坑：同步 taskkill .status() 实测会等 5 秒+，绝不可用。）
+fn kill_backend(pid: u32) {
+    // 1) 直接强杀 node
+    terminate_pid(pid);
+    // 2) 读后端写的状态文件，强杀 gopeed
+    if let Ok(s) = std::fs::read_to_string(backend_state_path()) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+            if let Some(g) = v.get("gopeed").and_then(|x| x.as_u64()) {
+                terminate_pid(g as u32);
+            }
+        }
+    }
+    // 3) 兜底：不等待的 taskkill，清理树中可能存在的其他孙进程
+    use std::os::windows::process::CommandExt;
+    let _ = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .spawn();
 }
 
 struct BackendChild {
@@ -87,7 +123,7 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                 }
             }
             "quit" => {
-                // 先杀后端进程树（taskkill 实测 ~50ms），再 TerminateProcess 强杀自身，
+                // 先杀后端（直接 TerminateProcess node + gopeed，实测 ~4ms），再强杀自身，
                 // 彻底规避 WebView2/CRT 清理卡顿与窗体闪烁。
                 if let Some(child) = app.try_state::<BackendChild>() {
                     kill_backend(child.pid);

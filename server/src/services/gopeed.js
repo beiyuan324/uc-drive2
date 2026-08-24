@@ -1,7 +1,19 @@
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import net from 'node:net';
-import { resolveGopeedPath, GOPEED_DIR } from '../config.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { resolveGopeedPath, GOPEED_DIR, DATA_DIR } from '../config.js';
+
+/** 记录 node/gopeed pid，供 Tauri 退出时直接 TerminateProcess（不依赖 taskkill，秒退） */
+function writeBackendState(gopeedPid) {
+  try {
+    fs.writeFileSync(
+      path.join(DATA_DIR, 'backend-state.json'),
+      JSON.stringify({ node: process.pid, gopeed: gopeedPid }),
+    );
+  } catch {}
+}
 
 /**
  * gopeed 托管：headless 拉起 gopeed-web.exe，REST 客户端，健康轮询，
@@ -90,6 +102,7 @@ export class GopeedManager {
       });
     }
     this.proc = proc;
+    writeBackendState(proc.pid);
     proc.stdout?.on('data', d => this.log.log?.(`[gopeed] ${String(d).trim()}`));
     proc.stderr?.on('data', d => this.log.error?.(`[gopeed] ${String(d).trim()}`));
     proc.on('exit', (code, signal) => {
