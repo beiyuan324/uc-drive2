@@ -59,7 +59,7 @@ function onThemeChange(v: ThemeMode) {
       class="app-sider"
     >
       <div class="brand">
-        <div class="brand-mark" />
+        <img class="brand-mark" src="@/assets/app-icon.png" alt="uc-drive2" />
         <span class="brand-name">uc-drive2</span>
       </div>
       <n-menu
@@ -152,18 +152,10 @@ function onThemeChange(v: ThemeMode) {
   padding: 18px 20px 14px;
 }
 .brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: var(--accent);
-  position: relative;
-}
-.brand-mark::after {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border-radius: 3px;
-  background: var(--zinc-50);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 .brand-name {
   font-weight: 600;
