@@ -128,7 +128,9 @@ function onThemeChange(v: ThemeMode) {
       <n-layout-content class="app-content" content-style="padding: 20px 24px;">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
           </transition>
         </router-view>
       </n-layout-content>

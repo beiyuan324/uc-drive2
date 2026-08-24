@@ -51,8 +51,8 @@ async function parseAll() {
     for (const link of links) {
       const r = await api.ucParse(link);
       parsed.value.push({ shareId: r.shareId, shareLink: r.shareLink, session: r.session, cookieUsed: r.cookieUsed });
-      message.success(`解析成功：${link}`);
     }
+    message.success(`解析成功：${parsed.value.length} 个分享链接`);
     // 进入第一个链接的根目录
     activeIdx.value = 0;
     currentFiles.value = parsed.value[0] ? await enterRoot(parsed.value[0]) : [];
@@ -231,16 +231,18 @@ function clearAll() {
       </n-alert>
     </div>
 
-    <div v-if="parsed.length" class="links-bar">
+    <div v-if="parsed.length > 1" class="links-bar">
+      <span class="links-bar-label">已解析</span>
       <n-tag
         v-for="(p, i) in parsed"
         :key="p.shareId + i"
         :type="i === activeIdx ? 'primary' : 'default'"
         size="small"
         class="link-tag"
+        :title="p.shareLink"
         @click="switchLink(i)"
       >
-        {{ p.shareLink }}
+        分享 {{ i + 1 }}
       </n-tag>
     </div>
 
@@ -349,14 +351,21 @@ function clearAll() {
 }
 .links-bar {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
+.links-bar-label {
+  font-size: 12px;
+  color: var(--zinc-400);
+  margin-right: 2px;
+}
 .link-tag {
   cursor: pointer;
-  max-width: 340px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .results-header {
   display: flex;

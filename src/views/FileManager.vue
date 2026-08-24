@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onActivated, ref, watch } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import {
   NButton, NIcon, NBreadcrumb, NBreadcrumbItem, NEmpty, NAlert,
   NInput, NModal, NTreeSelect, NSpin, NDropdown, NSpace,
 } from 'naive-ui';
 import {
-  PhArrowLeft as ArrowLeftIcon, PhPlus as PlusIcon, PhTrash as TrashIcon,
+  PhArrowLeft as ArrowLeftIcon, PhTrash as TrashIcon,
   PhUploadSimple as UploadIcon, PhGridFour as GridIcon, PhList as ListIcon,
   PhImage as ImageGlyph, PhDotsThreeVertical as MoreIcon,
+  PhFolderPlus as FolderPlusIcon, PhDownloadSimple as DownloadIcon,
+  PhPencilSimple as PencilIcon, PhFolderOpen as FolderOpenIcon, PhEye as EyeIcon,
 } from '@phosphor-icons/vue';
 import { useFilesStore } from '@/stores/files';
 import { api, formatSize } from '@/api';
@@ -131,7 +133,7 @@ function onDrop(e: DragEvent) {
   }
 }
 
-onMounted(() => files.refresh());
+onActivated(() => files.refresh());
 </script>
 
 <template>
@@ -139,10 +141,14 @@ onMounted(() => files.refresh());
     <!-- 工具条 -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <n-button quaternary size="small" :disabled="files.currentDir == null" @click="goRoot">
-          <template #icon><n-icon :component="ArrowLeftIcon" /></template>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary circle size="small" :disabled="files.currentDir == null" @click="goRoot" aria-label="返回根目录">
+              <template #icon><n-icon :component="ArrowLeftIcon" /></template>
+            </n-button>
+          </template>
           返回根目录
-        </n-button>
+        </n-tooltip>
         <n-breadcrumb>
           <n-breadcrumb-item v-for="(b, i) in breadcrumbItems" :key="i" @click="files.enterDir(b.id)">
             {{ b.label }}
@@ -150,19 +156,27 @@ onMounted(() => files.refresh());
         </n-breadcrumb>
       </div>
       <div class="toolbar-right">
-        <n-button secondary size="small" @click="showNewDir = true">
-          <template #icon><n-icon :component="PlusIcon" /></template>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary circle size="small" @click="showNewDir = true" aria-label="新建目录">
+              <template #icon><n-icon :component="FolderPlusIcon" /></template>
+            </n-button>
+          </template>
           新建目录
-        </n-button>
-        <n-button secondary size="small" @click="files.showUpload = true">
-          <template #icon><n-icon :component="UploadIcon" /></template>
+        </n-tooltip>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary circle size="small" @click="files.showUpload = true" aria-label="上传文件">
+              <template #icon><n-icon :component="UploadIcon" /></template>
+            </n-button>
+          </template>
           上传文件
-        </n-button>
+        </n-tooltip>
         <n-button-group size="small">
-          <n-button :type="viewMode === 'grid' ? 'primary' : 'default'" @click="viewMode = 'grid'">
+          <n-button :type="viewMode === 'grid' ? 'primary' : 'default'" @click="viewMode = 'grid'" aria-label="网格视图">
             <template #icon><n-icon :component="GridIcon" /></template>
           </n-button>
-          <n-button :type="viewMode === 'list' ? 'primary' : 'default'" @click="viewMode = 'list'">
+          <n-button :type="viewMode === 'list' ? 'primary' : 'default'" @click="viewMode = 'list'" aria-label="列表视图">
             <template #icon><n-icon :component="ListIcon" /></template>
           </n-button>
         </n-button-group>
@@ -235,15 +249,39 @@ onMounted(() => files.refresh());
             <td>{{ node.is_dir ? '—' : formatSize(node.size) }}</td>
             <td class="cell-muted">{{ new Date(node.updated_at).toLocaleString('zh-CN') }}</td>
             <td>
-              <n-space size="small">
-                <n-button size="tiny" quaternary @click="node.is_dir ? files.enterDir(node.id) : openPreview(node)">
+              <n-space size="small" align="center">
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-button size="tiny" quaternary circle :aria-label="node.is_dir ? '打开' : '预览'" @click="node.is_dir ? files.enterDir(node.id) : openPreview(node)">
+                      <template #icon><n-icon :component="node.is_dir ? FolderOpenIcon : EyeIcon" /></template>
+                    </n-button>
+                  </template>
                   {{ node.is_dir ? '打开' : '预览' }}
-                </n-button>
-                <n-button v-if="!node.is_dir" size="tiny" quaternary @click="download(node)">
+                </n-tooltip>
+                <n-tooltip v-if="!node.is_dir" trigger="hover">
+                  <template #trigger>
+                    <n-button size="tiny" quaternary circle aria-label="下载" @click="download(node)">
+                      <template #icon><n-icon :component="DownloadIcon" /></template>
+                    </n-button>
+                  </template>
                   下载
-                </n-button>
-                <n-button size="tiny" quaternary @click="openRename(node)">重命名</n-button>
-                <n-button size="tiny" quaternary type="error" @click="confirmDelete(node)">删除</n-button>
+                </n-tooltip>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-button size="tiny" quaternary circle aria-label="重命名" @click="openRename(node)">
+                      <template #icon><n-icon :component="PencilIcon" /></template>
+                    </n-button>
+                  </template>
+                  重命名
+                </n-tooltip>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-button size="tiny" quaternary circle type="error" aria-label="删除" @click="confirmDelete(node)">
+                      <template #icon><n-icon :component="TrashIcon" /></template>
+                    </n-button>
+                  </template>
+                  删除
+                </n-tooltip>
               </n-space>
             </td>
           </tr>

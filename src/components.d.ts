@@ -15,6 +15,7 @@ declare module 'vue' {
     FileIcon: typeof import('./components/FileIcon.vue')['default']
     NButtonGroup: typeof import('naive-ui')['NButtonGroup']
     NTable: typeof import('naive-ui')['NTable']
+    NTooltip: typeof import('naive-ui')['NTooltip']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }

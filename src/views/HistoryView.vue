@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onActivated, ref } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import { NButton, NIcon, NEmpty, NSpin, NTable, NSpace, NTag, NTooltip } from 'naive-ui';
 import {
@@ -33,7 +33,7 @@ async function load() {
   }
 }
 
-onMounted(load);
+onActivated(load);
 
 async function reDownload(t: TaskItem) {
   try {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onActivated, ref } from 'vue';
 import { NButton, NIcon, NCard, NDescriptions, NDescriptionsItem, NTag, NSpin, NSpace, NInput, NInputNumber, NAlert, useMessage } from 'naive-ui';
-import { PhHardDrive as HardDriveIcon, PhDatabase as DatabaseIcon, PhGauge as GaugeIcon, PhInfo as InfoIcon, PhArrowClockwise as RefreshIcon, PhLinkSimple as LinkSimpleIcon, PhFloppyDisk as SaveIcon, PhTrash as TrashIcon } from '@phosphor-icons/vue';
+import { PhArrowClockwise as RefreshIcon, PhFloppyDisk as SaveIcon, PhTrash as TrashIcon } from '@phosphor-icons/vue';
 import { useSettingsStore } from '@/stores/settings';
 import { api, getBase } from '@/api';
 
@@ -79,7 +79,7 @@ async function removeCookie() {
   }
 }
 
-onMounted(refreshAll);
+onActivated(refreshAll);
 </script>
 
 <template>
@@ -97,7 +97,6 @@ onMounted(refreshAll);
               <span class="mono">{{ settings.info?.dataDir }}</span>
             </n-descriptions-item>
           </n-descriptions>
-          <p class="hint">文件直接存放于磁盘，数据库仅保存元数据。</p>
         </n-card>
 
         <n-card title="服务状态" class="card">
@@ -115,9 +114,6 @@ onMounted(refreshAll);
               <span v-if="settings.info?.gopeed.port" class="mono inline-mono">
                 127.0.0.1:{{ settings.info.gopeed.port }}
               </span>
-            </n-descriptions-item>
-            <n-descriptions-item label="端口占用策略">
-              17210 起，被占用自动 +1；仅监听 127.0.0.1，不暴露公网。
             </n-descriptions-item>
           </n-descriptions>
           <n-space class="actions" justify="end">
@@ -205,12 +201,6 @@ onMounted(refreshAll);
             <n-descriptions-item label="版本">
               <span class="mono">{{ health?.version || '1.0.0' }}</span>
             </n-descriptions-item>
-            <n-descriptions-item label="架构">
-              Tauri v2 + Vue 3 + Naive UI + Express + gopeed
-            </n-descriptions-item>
-            <n-descriptions-item label="技术说明">
-              单用户本地网盘，无登录鉴权；SQLite 使用 Node 内置 node:sqlite，无原生模块。
-            </n-descriptions-item>
           </n-descriptions>
         </n-card>
       </div>
@@ -244,11 +234,6 @@ onMounted(refreshAll);
 }
 .inline-mono {
   margin-left: 10px;
-}
-.hint {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--zinc-500);
 }
 .actions {
   margin-top: 12px;

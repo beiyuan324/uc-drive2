@@ -71,7 +71,12 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                 }
             }
             "quit" => {
-                app.exit(0);
+                // app.exit(0) 在 Windows 上会等 WebView2 清理（可卡数秒），且隐藏窗口销毁时可能闪一下窗体。
+                // 改为：先杀后端进程树，再立即强退，彻底规避卡顿与窗体闪烁。
+                if let Some(child) = app.try_state::<BackendChild>() {
+                    kill_backend(child.pid);
+                }
+                std::process::exit(0);
             }
             _ => {}
         })

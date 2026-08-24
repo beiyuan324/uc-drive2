@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { onActivated, onDeactivated, ref, computed, watch } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import {
   NButton, NIcon, NInput, NModal, NProgress, NTag, NEmpty, NSpin, NRadioGroup, NRadioButton, NSpace,
@@ -171,11 +171,12 @@ function taskEta(t: TaskItem): string | null {
   return `${Math.floor(sec / 3600)} 时 ${Math.floor((sec % 3600) / 60)} 分`;
 }
 
-onMounted(() => {
+onActivated(() => {
+  // startPolling 内部会先 refresh 一次，切回本页时数据即时新鲜
   tasks.startPolling(2000);
   requestNotifyPermission();
 });
-onUnmounted(() => tasks.stopPolling());
+onDeactivated(() => tasks.stopPolling());
 watch(() => tasks.tasks, checkCompleted, { deep: true });
 </script>
 
