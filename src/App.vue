@@ -7,7 +7,7 @@ import AppLayout from '@/components/AppLayout.vue';
 
 const settings = useSettingsStore();
 
-const isDark = computed(() => document.documentElement.dataset.theme === 'dark');
+const isDark = computed(() => settings.isDark);
 
 onMounted(() => {
   settings.applyTheme(settings.themeMode);

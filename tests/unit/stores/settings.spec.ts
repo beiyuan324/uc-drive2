@@ -48,6 +48,31 @@ describe('settings store', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 
+  it('isDark 响应式：light→dark 切换后立即更新（回归：曾因读 DOM 属性不响应而失效）', () => {
+    const store = useSettingsStore();
+    store.applyTheme('light');
+    expect(store.isDark).toBe(false);
+    expect(document.documentElement.dataset.theme).toBe('light');
+    store.applyTheme('dark');
+    expect(store.isDark).toBe(true);
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    store.applyTheme('light');
+    expect(store.isDark).toBe(false);
+  });
+
+  it('auto 模式跟随系统偏好', () => {
+    const store = useSettingsStore();
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    store.applyTheme('auto');
+    expect(store.isDark).toBe(dark);
+    // 模拟系统偏好变化：auto 下应跟随，显式 light/dark 下不跟随
+    store.systemThemeListener({ matches: !dark } as MediaQueryListEvent);
+    expect(store.isDark).toBe(!dark);
+    store.applyTheme('light');
+    store.systemThemeListener({ matches: true } as MediaQueryListEvent);
+    expect(store.isDark).toBe(false);
+  });
+
   it('load() 拉取后端设置', async () => {
     const store = useSettingsStore();
     await store.load();

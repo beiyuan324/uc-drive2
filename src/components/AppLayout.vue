@@ -41,7 +41,7 @@ const themeOptions: { label: string; value: ThemeMode }[] = [
   { label: '跟随系统', value: 'auto' },
 ];
 
-const isDark = computed(() => document.documentElement.dataset.theme === 'dark');
+const isDark = computed(() => settings.isDark);
 
 function onThemeChange(v: ThemeMode) {
   settings.applyTheme(v);
