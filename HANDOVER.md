@@ -97,7 +97,7 @@
 1. **菜单切换丢失状态** → AppLayout `<router-view>` 包 `<keep-alive>`；FileManager/Downloads/History/Settings 改为 `onActivated` 刷新（保留位置/状态、返回时数据新鲜），Downloads 改 `onActivated/onDeactivated` 控制轮询启停
 2. **解析成功通知弹全链接** → 改为「解析成功：N 个分享链接」
 3. **UC 链接标签栏贴一长串 URL** → 仅多链接时显示，标签精简为「分享 N」（title 保留完整链接）
-4. **托盘退出卡几秒 + 弹窗闪烁** → 根因：`app.exit(0)` 在 Windows 等 WebView2 清理且隐藏窗口销毁时闪窗体；第一轮改为杀后端后 `std::process::exit(0)` 仍卡（CRT atexit/静态析构/DLL detach 卸载 msedgewebview2.dll 仍卡数秒）；**最终**改为 `TerminateProcess(GetCurrentProcess())` 强杀自身（单系统调用、跳过一切清理、无窗体闪烁），实测整棵进程树（app+node+gopeed）无残留无孤儿
+4. **托盘退出卡几秒 + 弹窗闪烁** → 根因：`app.exit(0)` 在 Windows 等 WebView2 清理且隐藏窗口销毁时闪窗体；改 `std::process::exit(0)` 仍卡（CRT 清理）；改 `TerminateProcess` 强杀自身后**仍卡 5s**——探针实测（exit-trace.log）真凶是 `taskkill .status()` 同步等待整棵树被杀完（5376ms），而外部 taskkill 只要 143ms，属应用内 spawn 的诡异慢路径。**最终方案**：后端每次启动把 `{node,gopeed}` pid 写 `%APPDATA%/uc-drive2/backend-state.json`，退出时直接 `TerminateProcess(node)+TerminateProcess(gopeed)+TerminateProcess(自身)` 全单系统调用零等待（实测 4ms），taskkill 仅留不等待兜底。实测：5.4s→4ms，整树无残留无孤儿
 5. **文件页中文按钮占满** → 工具栏（返回/新建目录/上传）改纯图标+tooltip，列表行操作（打开/预览/下载/重命名/删除）改图标按钮
 6. **设置页废话多** → 删「架构」「技术说明」「端口占用策略」「存储 hint」，关于只留版本
 
