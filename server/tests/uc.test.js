@@ -55,3 +55,39 @@ test('uc 解析器对无效链接报错', async () => {
 test('uc 解析调用真实 UC 接口（网络可用时）', { skip: true, timeout: 30000 }, async () => {
   // 需要真实分享链接 + cookie，手动运行验证用
 });
+
+test('uc.probeDownloadUrl 直链预检分类（本地 mock OSS）', async () => {
+  const http = await import('node:http');
+  const { probeDownloadUrl } = await import('../src/services/uc.js');
+  const cases = [
+    // 正常可下载：206 分片响应
+    { status: 206, body: 'partial-data', expect: 'ok' },
+    // Cookie 过期：OSS 回调拒绝，require login [auth expired]
+    { status: 403, body: '<?xml version="1.0"?><Error><Code>RequestDeniedByCallback</Code><Message>Callback deny this request reason: require login [auth expired]</Message></Error>', expect: 'cookie_expired' },
+    // 签名不匹配：直链本身有问题，刷新即可
+    { status: 403, body: '<?xml version="1.0"?><Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match</Message></Error>', expect: 'url_invalid' },
+  ];
+  let idx = 0;
+  const srv = http.createServer((_req, res) => {
+    const c = cases[idx];
+    idx += 1;
+    res.writeHead(c.status, { 'Content-Type': 'text/xml' });
+    res.end(c.body);
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}/x`;
+  try {
+    for (const c of cases) {
+      const r = await probeDownloadUrl(base, 'cookie=1');
+      assert.equal(r.kind, c.expect, `case ${c.expect} 应分类正确`);
+    }
+    // 网络异常（服务已关闭）→ network
+    await new Promise((r) => srv.close(r));
+    const deadPort = base;
+    const dead = await probeDownloadUrl(deadPort, 'cookie=1');
+    assert.equal(dead.kind, 'network', '连接失败应分类为 network');
+    return;
+  } finally {
+    srv.close();
+  }
+});

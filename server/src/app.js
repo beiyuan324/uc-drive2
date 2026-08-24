@@ -249,6 +249,16 @@ export function createApp({ db, gopeed, tasks }) {
     const { shareId, stoken, fid, shareFidToken, filename, size, ctoken, cookies, shareLink, connections } = req.body || {};
     if (!shareId || !fid) return res.status(400).json({ error: '缺少下载参数' });
     const url = await ucSvc.resolveDownload({ shareId, stoken, fid, shareFidToken, ctoken, cookies });
+    // 预检直链：UC 直链带 OSS 登录回调，Cookie 失效/链接签名错误会 403 且 2 秒内就失败。
+    // 创建任务前先带 Cookie 拉 4KB 验证，把真实原因直接抛给前端（而非笼统「下载失败」）。
+    const probe = await ucSvc.probeDownloadUrl(url, cookies || '');
+    if (probe.kind === 'cookie_expired') {
+      return res.status(403).json({ error: 'UC Cookie 已失效，请在设置中更新后重试', kind: 'cookie_expired' });
+    }
+    if (probe.kind === 'url_invalid') {
+      return res.status(502).json({ error: '直链校验失败（签名无效），请重试', kind: 'url_invalid' });
+    }
+    // probe.network / probe.http：瞬时问题，交给 gopeed 引擎处理（可能重试成功）
     const headers = {
       'Cookie': cookies || '',
       'User-Agent': ucSvc.UA,

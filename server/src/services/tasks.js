@@ -231,6 +231,20 @@ export class TaskService {
         url = await ucSvc.getDownloadUrl(uc.shareId, stoken, uc.fid, shareFidToken, session.ctoken, session.cookies);
       }
 
+      // 拿到新直链后先带 Cookie 预检：cookie 失效直接置 cookie_expired，不再白跑一轮 gopeed
+      const probe = await ucSvc.probeDownloadUrl(url, session.cookies || '');
+      if (probe.kind === 'cookie_expired') {
+        this.db.prepare("UPDATE tasks SET status = 'cookie_expired', error = 'UC Cookie 已失效，请在设置中更新', updated_at = ? WHERE id = ?")
+          .run(now(), r.id);
+        return true;
+      }
+      if (probe.kind === 'url_invalid') {
+        this.db.prepare("UPDATE tasks SET error = '刷新链接后签名仍无效，请稍后重试', updated_at = ? WHERE id = ?")
+          .run(now(), r.id);
+        return false;
+      }
+      // probe.network / http：瞬时问题，仍交给 gopeed 尝试
+
       // 清掉旧 gopeed 任务（保留已下载文件），重建任务
       try { await this.gopeed.remove(r.gopeed_id, false); } catch { /* 忽略 */ }
       const headers = { 'Cookie': session.cookies, 'User-Agent': ucSvc.UA || undefined, 'Referer': 'https://drive.uc.cn/', 'Origin': 'https://drive.uc.cn', 'x-csrf-token': session.ctoken };
@@ -251,11 +265,19 @@ export class TaskService {
   }
 
   /** 判断 gopeed 任务错误是否可重试 / 是否 cookie 过期 */
-  _classifyUcError(r, g) {
+  async _classifyUcError(r, g) {
     if (!r.metadata?.uc) return null;
     const msg = String(g.error || '').toLowerCase();
     if (/cookie|require login|authentication failed|login required/i.test(msg)) return 'cookie_expired';
     if (/401|403|404|expired|signature|error code 22/i.test(msg)) return 'retry';
+    // 真实 gopeed 的 API 任务对象没有 error 字段（错误只写进日志），
+    // 走到这里说明无错误信息可依赖：带 Cookie 探测直链来区分 cookie 失效 / 链接签名问题。
+    const { getUcCookie } = await import('./cookie.js');
+    const ucSvc = await import('./uc.js');
+    const cookie = getUcCookie(this.db);
+    const probe = await ucSvc.probeDownloadUrl(r.source_url || '', cookie || '');
+    if (probe.kind === 'cookie_expired') return 'cookie_expired';
+    if (probe.kind === 'url_invalid') return 'retry';
     return null;
   }
 
@@ -301,7 +323,7 @@ export class TaskService {
       const status = this.gopeed.mapStatus(g.status);
       // UC 任务错误分类：cookie 失效 / 直链过期可重试
       if (status === 'error' && r.status !== 'cookie_expired') {
-        const kind = this._classifyUcError({ ...r, metadata: this._parseMeta(r) }, g);
+        const kind = await this._classifyUcError({ ...r, metadata: this._parseMeta(r) }, g);
         if (kind === 'cookie_expired') {
           this.db.prepare("UPDATE tasks SET status = 'cookie_expired', error = 'UC Cookie 已失效，请在设置中更新', updated_at = ? WHERE id = ?")
             .run(now(), r.id);

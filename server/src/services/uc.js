@@ -140,6 +140,39 @@ export async function getDownloadUrl(shareId, stoken, fid, shareFidToken, ctoken
   return url;
 }
 
+/**
+ * 预检下载直链：带 Cookie 小范围 GET（4KB），判断链接签名与账号登录态是否可用。
+ * OSS 直链带回调（auth-cdn.uc.cn/outer/oss/checkplay）会校验请求 Cookie 的登录态：
+ *   - 403 + require login / auth expired / auth not found → Cookie 已失效
+ *   - 403 + SignatureDoesNotMatch / AccessDenied / expired → 链接签名问题（刷新即可）
+ *   - 200/206 → 可用；网络异常 → network（瞬时问题，交给下载引擎重试）
+ */
+export async function probeDownloadUrl(url, cookies = '', timeout = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, {
+      headers: { ...headersOf(cookies), 'Range': 'bytes=0-4095' },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    const text = await res.text().catch(() => '');
+    if (res.status === 200 || res.status === 206) return { ok: true, kind: 'ok' };
+    const low = text.toLowerCase();
+    if (res.status === 403 && /require login|auth expired|auth not found|not logged|login required/i.test(low)) {
+      return { ok: false, kind: 'cookie_expired', detail: text.slice(0, 120) };
+    }
+    if (res.status === 403 && /signaturedoesnotmatch|accessdenied|request has expired|expired/i.test(low)) {
+      return { ok: false, kind: 'url_invalid', detail: text.slice(0, 120) };
+    }
+    return { ok: false, kind: 'http', detail: `HTTP ${res.status}` };
+  } catch {
+    return { ok: false, kind: 'network' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 完整解析：分享链接 → 会话 + 当前目录文件列表 */
 export async function parse(shareLink, cookie = '') {
   const { shareId, pdirFid } = extractIds(shareLink);

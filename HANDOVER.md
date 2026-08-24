@@ -92,6 +92,28 @@
 
 **验证**：端到端（真实后端+gopeed+限速 Range 服务器 256MB/100 连接）——首采样 4.9%（修复前 98.5%）、进度平滑 4.9→12→…→99.3→done 100%、速度 9.3-11.9MB/s 准确、30s 完成。测试：后端 40 项（39 过 1 跳过）、前端 24 项、vue-tsc 零错误。
 
+### 9. 下载失败「下载失败」无因可查 → 根因：UC Cookie 过期 + 错误分类失效（第 5 轮，用户反馈）
+
+**用户反馈**：测试下载「命运-冠位指定8.21 更新.apk」报错，任务只显示「下载失败」。
+
+**诊断过程（实测）**：
+- gopeed core.log：`task download failed ... error="http request fail, code:403"`
+- 直链 curl 复现：403 XML `RequestDeniedByCallback` `Callback deny this request reason: require login [auth expired]`
+- 分享浏览（parse/list-folder）用同一 cookie 正常 —— 分享是公开的，不需要有效登录；但下载直链带 OSS 回调（auth-cdn.uc.cn/outer/oss/checkplay）会校验请求 Cookie 的账号登录态
+- 应用存储 cookie == ucAuth.txt cookie（`__pugs=bfd63dac...`），任务 3（08-22）用它能下完 2.1GB → 该 cookie 这两天过期了
+- **根因：UC 账号 Cookie 已过期**（不是直链/代码问题）；uc-e2e 里「多连接可叠加」测试也因 403 失败，同因
+
+**顺带发现的真 bug：`_classifyUcError` 依赖 gopeed 的 `error` 字段，但真实 gopeed API 任务对象根本没有 error 字段（错误只写进 core.log）** → 「Cookie 失效」识别与直链刷新重试在真实 gopeed 面前从未触发过（只在 mock 测试里生效），所有 UC 错误一律落成笼统「下载失败」。
+
+**修复**：
+- `uc.js` 新增 `probeDownloadUrl()`：带 Cookie 小范围 GET（4KB），分类 206=ok / 403+require login|auth expired=**cookie_expired** / 403+SignatureDoesNotMatch=url_invalid / 网络异常=network
+- `app.js` `/api/uc/download` 创建任务前预检：cookie_expired → 403 `{ error:'UC Cookie 已失效，请在设置中更新后重试', kind:'cookie_expired' }`；url_invalid → 502 提示重试
+- `tasks.js` `_classifyUcError` 改为 async：g.error 为空（真实 gopeed）时用 probeDownloadUrl 探测 source_url 兜底分类；`_refreshUcUrl` 换新直链后也先预检再交 gopeed（避免白跑一轮）
+- 前端 `api.req` 抛错时附带 `kind`；ParseView 下载失败 catch：kind=cookie_expired → 8s warning 引导「到设置中更新」+ 自动跳转 /settings
+- 测试：新增 probeDownloadUrl 本地 mock 4 分类测试（42 项 40 过 1 跳过，1 个 fail 是过期 cookie 挡路的网络测试）
+
+**用户需要做的**：在浏览器登录 drive.uc.cn → 复制 __pugs 等完整 Cookie → 粘贴到应用「设置 → UC Cookie」保存。之后下载、uc-e2e 网络测试即恢复。
+
 ### 8. UC 尾部收尾感知（第 4 轮，用户反馈「进度/速度更不对」）
 
 **用户反馈**：下载「明日方舟 官服 8.21 更新.apk」（1.97GB）进度 99.7% 卡住、速度显示 8-20KB/s。
@@ -136,7 +158,7 @@
 
 ## 四、下次会话怎么做（行动指南）
 
-1. **先跑测试确认基线**：`cd server && npm test`（41 项，40 过 1 跳过网络项）+ `npm run test:unit`（24 项）
+1. **先跑测试确认基线**：`cd server && npm test`（42 项，40 过 1 跳过 1 个因 cookie 过期的网络项）+ `npm run test:unit`（24 项）
 2. **UC 功能验证**：确保根目录 `ucAuth.txt` 存在（`[url]` + `[cookie]` 两段），跑 `cd server && node --test tests/uc-e2e.test.js` 验证真实链路（需网络）
 3. **修改后重新打包**：`npx esbuild server/src/index.js --bundle --platform=node --format=cjs --outfile=server-dist/server.js` → `npm run tauri build` → NSIS 覆盖安装（`Start-Process ... -Verb RunAs -Wait`，注意先杀旧实例）
 4. **验证安装版**：启动 → 读 `%APPDATA%/uc-drive2/server.port` → curl health → 看 `%APPDATA%/uc-drive2/access.log` 确认前端请求到达（CORS 是否被拦）

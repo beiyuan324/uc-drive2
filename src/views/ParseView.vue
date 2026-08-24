@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useMessage, useDialog } from 'naive-ui';
 import {
   NButton, NIcon, NInput, NAlert, NEmpty, NSpin, NTable, NSpace,
@@ -16,6 +17,7 @@ import type { UcFile, UcSession } from '@/types';
 
 const message = useMessage();
 const dialog = useDialog();
+const router = useRouter();
 const settings = useSettingsStore();
 
 const shareText = ref('');
@@ -107,6 +109,20 @@ function goCrumb(idx: number) {
   loadFolder(active.value, target.pdirFid);
 }
 
+/** 下载创建失败：Cookie 失效要给出明确引导（否则用户只看到笼统「下载失败」） */
+function handleDownloadError(e: unknown, name = '') {
+  const err = e as Error & { kind?: string };
+  if (err.kind === 'cookie_expired') {
+    message.warning(
+      `${name ? `「${name}」` : ''}UC Cookie 已失效，请到设置中更新后重新下载`,
+      { duration: 8000 },
+    );
+    setTimeout(() => router.push('/settings'), 500);
+    return;
+  }
+  message.error(err.message || '下载失败');
+}
+
 async function downloadOne(f: UcFile) {
   if (!active.value) return;
   downloading.value = true;
@@ -125,7 +141,7 @@ async function downloadOne(f: UcFile) {
     });
     message.success(`已创建任务：${f.name}`);
   } catch (e) {
-    message.error((e as Error).message);
+    handleDownloadError(e, f.name);
   } finally {
     downloading.value = false;
   }
@@ -172,7 +188,7 @@ async function downloadAll() {
         });
         created += 1;
       } catch (e) {
-        message.error(`「${f.name}」创建失败：${(e as Error).message}`);
+        handleDownloadError(e, f.name);
       }
     }
     message.success(`已创建 ${created}/${all.length} 个下载任务`);

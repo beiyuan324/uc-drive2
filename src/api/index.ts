@@ -79,7 +79,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         const msg = data?.error || `请求失败 (${res.status})`;
-        throw new Error(msg);
+        const err = new Error(msg) as Error & { kind?: string };
+        err.kind = data?.kind;
+        throw err;
       }
       return data as T;
     } catch (e) {
