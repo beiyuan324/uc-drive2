@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { BASE_PORT, PORT_FILE, DATA_DIR, ensureDirs, STORAGE_DIR } from './config.js';
+import { BASE_PORT, PORT_FILE, DATA_DIR, ensureDirs, setStorageDir, STORAGE_DIR } from './config.js';
 import { openDb } from './db.js';
+import { getSetting } from './services/cookie.js';
 import { createApp } from './app.js';
 import { GopeedManager } from './services/gopeed.js';
 import { TaskService } from './services/tasks.js';
@@ -38,12 +39,16 @@ function findFreePort(startPort, maxTries = 20) {
 }
 
 async function main() {
+  const db = openDb();
+
+  // 恢复用户自定义的网盘存储目录（settings 表 storage_dir，空 = 默认 %APPDATA%/uc-drive2/storage）
+  const savedStorageDir = getSetting(db, 'storage_dir');
+  if (savedStorageDir) setStorageDir(savedStorageDir);
   ensureDirs();
   fs.mkdirSync(path.join(DATA_DIR, 'tmp'), { recursive: true });
 
-  const db = openDb();
-  log.log(`[uc-drive2] 数据目录: ${process.env.APPDATA || '~'}\\uc-drive2`);
-  log.log(`[uc-drive2] 存储目录: ${STORAGE_DIR}`);
+  log.log(`[uc-drive2] 数据目录: ${DATA_DIR}`);
+  log.log(`[uc-drive2] 存储目录: ${STORAGE_DIR}${savedStorageDir ? '（用户自定义）' : ''}`);
 
   const gopeed = new GopeedManager({ log });
   const tasks = new TaskService(db, gopeed);

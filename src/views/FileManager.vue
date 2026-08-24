@@ -9,11 +9,12 @@ import {
   PhArrowLeft as ArrowLeftIcon, PhTrash as TrashIcon,
   PhUploadSimple as UploadIcon, PhGridFour as GridIcon, PhList as ListIcon,
   PhImage as ImageGlyph, PhDotsThreeVertical as MoreIcon,
-  PhFolderPlus as FolderPlusIcon, PhDownloadSimple as DownloadIcon,
+  PhFolderPlus as FolderPlusIcon,
   PhPencilSimple as PencilIcon, PhFolderOpen as FolderOpenIcon, PhEye as EyeIcon,
+  PhArrowSquareOut as RevealIcon, PhArrowLineRight as MoveIcon,
 } from '@phosphor-icons/vue';
 import { useFilesStore } from '@/stores/files';
-import { api, formatSize } from '@/api';
+import { api, formatSize, revealInFolder } from '@/api';
 import FileIcon from '@/components/FileIcon.vue';
 import type { FileNode, ViewMode } from '@/types';
 
@@ -77,13 +78,17 @@ function confirmDelete(node: FileNode) {
   dialog.warning({
     title: '删除确认',
     content: node.is_dir
-      ? `将删除目录「${node.name}」及其全部内容，此操作不可恢复。`
-      : `将删除文件「${node.name}」。`,
+      ? `将删除目录「${node.name}」及其全部内容，可到系统回收站恢复。`
+      : `将删除文件「${node.name}」，可到系统回收站恢复。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      await files.remove(node.id);
-      message.success('已删除');
+      try {
+        await files.remove(node.id);
+        message.success('已删除（可到回收站恢复）');
+      } catch (e) {
+        message.error((e as Error).message || '删除失败');
+      }
     },
   });
 }
@@ -104,9 +109,10 @@ function closePreview() {
   previewUrl.value = '';
 }
 
-async function download(node: FileNode) {
-  const url = await api.downloadUrl(node.id, false);
-  window.open(url, '_blank');
+/** 在系统文件管理器中定位/打开（文件用 explorer /select, 定位，目录直接打开） */
+async function reveal(node: FileNode) {
+  const ok = await revealInFolder(node.path);
+  if (!ok) message.info('当前环境不支持打开系统文件管理器，请手动访问目录');
 }
 
 function openNode(node: FileNode) {
@@ -217,11 +223,12 @@ onActivated(() => files.refresh());
           <n-dropdown
             trigger="click"
             :options="[
+              { label: '打开所在目录', key: 'reveal' },
               { label: '重命名', key: 'rename' },
               { label: '移动', key: 'move' },
               { label: '删除', key: 'delete' },
             ]"
-            @select="(k: string) => k === 'rename' ? openRename(node) : k === 'move' ? openMove(node) : confirmDelete(node)"
+            @select="(k: string) => k === 'reveal' ? reveal(node) : k === 'rename' ? openRename(node) : k === 'move' ? openMove(node) : confirmDelete(node)"
           >
             <n-button quaternary circle size="small" class="grid-more" @click.stop>
               <template #icon><n-icon :component="MoreIcon" /></template>
@@ -260,11 +267,19 @@ onActivated(() => files.refresh());
                 </n-tooltip>
                 <n-tooltip v-if="!node.is_dir" trigger="hover">
                   <template #trigger>
-                    <n-button size="tiny" quaternary circle aria-label="下载" @click="download(node)">
-                      <template #icon><n-icon :component="DownloadIcon" /></template>
+                    <n-button size="tiny" quaternary circle aria-label="打开所在目录" @click="reveal(node)">
+                      <template #icon><n-icon :component="RevealIcon" /></template>
                     </n-button>
                   </template>
-                  下载
+                  打开所在目录
+                </n-tooltip>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-button size="tiny" quaternary circle aria-label="移动" @click="openMove(node)">
+                      <template #icon><n-icon :component="MoveIcon" /></template>
+                    </n-button>
+                  </template>
+                  移动
                 </n-tooltip>
                 <n-tooltip trigger="hover">
                   <template #trigger>
@@ -354,7 +369,7 @@ onActivated(() => files.refresh());
           <div v-else class="preview-unavailable">
             <n-icon :component="ImageGlyph" size="40" />
             <p>该类型不支持在线预览</p>
-            <n-button type="primary" @click="download(previewNode)">下载文件</n-button>
+            <n-button type="primary" @click="previewNode && reveal(previewNode)">打开所在目录</n-button>
           </div>
         </template>
       </div>

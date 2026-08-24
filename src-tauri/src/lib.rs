@@ -31,6 +31,23 @@ fn get_server_port() -> Result<u16, String> {
     Err("后端端口文件未就绪".into())
 }
 
+/// 在资源管理器中显示本地文件/目录：文件用 explorer /select, 定位，目录直接打开
+#[tauri::command]
+fn reveal_in_folder(path: String) -> Result<(), String> {
+    // explorer 的命令行解析对正斜杠/引号位置敏感：正斜杠或 /select,<path> 单参数带空格时
+    // 会解析失败并回退打开「文档」目录（实测验证）。必须：① 转反斜杠；② /select, 与路径分开传参。
+    let win_path = path.replace('/', "\\");
+    let p = PathBuf::from(&win_path);
+    let mut cmd = std::process::Command::new("explorer.exe");
+    if p.is_dir() {
+        cmd.arg(&win_path);
+    } else {
+        cmd.arg("/select,").arg(&win_path);
+    }
+    cmd.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // 强杀自身：std::process::exit(0) 仍会走 CRT 的 atexit / 静态析构 / DLL detach
 // （msedgewebview2.dll 等卸载时实测仍可卡数秒）。TerminateProcess 跳过一切清理，
 // 进程立即消失，无窗体闪烁；后端已在调用前杀掉，不会产生孤儿。
@@ -215,6 +232,7 @@ fn spawn_backend(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if let Err(err) = spawn_backend(app.handle()) {
                 eprintln!("[tauri] 后端启动失败: {err}");
@@ -224,7 +242,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_server_port])
+        .invoke_handler(tauri::generate_handler![get_server_port, reveal_in_folder])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {

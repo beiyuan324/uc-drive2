@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onActivated, ref } from 'vue';
-import { NButton, NIcon, NCard, NDescriptions, NDescriptionsItem, NTag, NSpin, NSpace, NInput, NInputNumber, NAlert, useMessage } from 'naive-ui';
-import { PhArrowClockwise as RefreshIcon, PhFloppyDisk as SaveIcon, PhTrash as TrashIcon } from '@phosphor-icons/vue';
+import { computed, onActivated, ref } from 'vue';
+import { NButton, NIcon, NCard, NDescriptions, NDescriptionsItem, NTag, NSpin, NSpace, NInput, NInputNumber, NAlert, NCheckbox, useMessage } from 'naive-ui';
+import { PhArrowClockwise as RefreshIcon, PhFloppyDisk as SaveIcon, PhTrash as TrashIcon, PhFolderOpen as FolderOpenIcon } from '@phosphor-icons/vue';
 import { useSettingsStore } from '@/stores/settings';
 import { api, getBase } from '@/api';
 
@@ -15,6 +15,55 @@ const loading = ref(true);
 const hasCookie = ref(false);
 const cookieInput = ref('');
 const savingCookie = ref(false);
+
+// 存储目录（本地编辑，保存后提交后端）
+const storageDirInput = ref('');
+const moveFiles = ref(true);
+const savingStorage = ref(false);
+const storageChanged = ref(false);
+const movedFiles = ref(0);
+
+function normalizePath(p: string): string {
+  return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+const isCustomStorageDir = computed(() => {
+  const info = settings.info;
+  if (!info?.storageDir || !info.defaultStorageDir) return false;
+  return normalizePath(info.storageDir) !== normalizePath(info.defaultStorageDir);
+});
+
+async function browseStorageDir() {
+  try {
+    // 系统目录选择器（Tauri 环境可用）；浏览器开发模式降级为手动输入
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const picked = await open({ directory: true, multiple: false, title: '选择网盘存储目录' });
+    if (typeof picked === 'string' && picked) storageDirInput.value = picked;
+  } catch {
+    message.info('当前环境不支持目录选择器，请直接输入路径');
+  }
+}
+
+async function saveStorageDir() {
+  const dir = storageDirInput.value.trim();
+  if (!dir) return message.warning('请输入存储目录');
+  savingStorage.value = true;
+  storageChanged.value = false;
+  try {
+    const info = await settings.saveStorageDir(dir, moveFiles.value);
+    movedFiles.value = info?.movedFiles ?? 0;
+    storageChanged.value = true;
+    message.success(info?.changed ? '存储目录已切换，文件已就位' : '当前已是该目录');
+  } catch (e) {
+    message.error((e as Error).message);
+  } finally {
+    savingStorage.value = false;
+  }
+}
+
+function resetStorageDir() {
+  storageDirInput.value = settings.info?.defaultStorageDir || '';
+}
 
 // 下载参数（本地编辑，保存后提交后端）
 const dlUc = ref(300);
@@ -32,6 +81,7 @@ async function refreshAll() {
   dlUc.value = settings.downloadConfig.ucConnections;
   dlHttp.value = settings.downloadConfig.httpConnections;
   dlMaxRunning.value = settings.downloadConfig.maxRunning;
+  storageDirInput.value = settings.info?.storageDir || '';
   base.value = await getBase().catch(() => '');
   loading.value = false;
 }
@@ -89,11 +139,41 @@ onActivated(refreshAll);
     <n-spin :show="loading">
       <div class="cards">
         <n-card title="存储" class="card">
+          <div class="storage-edit">
+            <div class="storage-label">
+              <span class="storage-name">网盘存储目录</span>
+              <span class="storage-desc">上传与下载完成的文件存放于此。默认为系统用户目录，可改为任意磁盘路径（如 D:\网盘）。</span>
+            </div>
+            <n-input
+              v-model:value="storageDirInput"
+              placeholder="选择或输入存储目录，例如 D:\网盘"
+              class="storage-input"
+            />
+            <n-space class="storage-actions" :size="10" align="center">
+              <n-button size="small" secondary @click="browseStorageDir">
+                <template #icon><n-icon :component="FolderOpenIcon" /></template>
+                浏览…
+              </n-button>
+              <n-checkbox v-model:checked="moveFiles">同时把现有文件移动到新目录（支持跨盘）</n-checkbox>
+            </n-space>
+            <n-space class="actions" justify="space-between" align="center">
+              <n-button size="small" secondary :disabled="!isCustomStorageDir" @click="resetStorageDir">
+                恢复默认目录
+              </n-button>
+              <n-button size="small" type="primary" secondary :loading="savingStorage" @click="saveStorageDir">
+                <template #icon><n-icon :component="SaveIcon" /></template>
+                保存存储目录
+              </n-button>
+            </n-space>
+            <n-alert v-if="storageChanged" type="success" :show-icon="false" class="storage-alert">
+              存储目录已生效{{ movedFiles ? `，已迁移 ${movedFiles} 个文件` : '' }}。
+            </n-alert>
+          </div>
           <n-descriptions :column="1" label-placement="left" size="small">
-            <n-descriptions-item label="网盘存储目录">
-              <span class="mono">{{ settings.info?.storageDir }}</span>
+            <n-descriptions-item label="默认存储目录">
+              <span class="mono">{{ settings.info?.defaultStorageDir || '—' }}</span>
             </n-descriptions-item>
-            <n-descriptions-item label="数据目录">
+            <n-descriptions-item label="数据目录（数据库/配置）">
               <span class="mono">{{ settings.info?.dataDir }}</span>
             </n-descriptions-item>
           </n-descriptions>
@@ -199,7 +279,7 @@ onActivated(refreshAll);
         <n-card title="关于" class="card">
           <n-descriptions :column="1" label-placement="left" size="small">
             <n-descriptions-item label="版本">
-              <span class="mono">{{ health?.version || '1.0.0' }}</span>
+              <span class="mono">{{ health?.version || '1.1.0' }}</span>
             </n-descriptions-item>
           </n-descriptions>
         </n-card>
@@ -273,5 +353,39 @@ onActivated(refreshAll);
 }
 .cookie-input {
   margin-bottom: 4px;
+}
+.storage-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--zinc-100);
+}
+.storage-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.storage-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.storage-desc {
+  font-size: 12px;
+  color: var(--zinc-500);
+}
+.storage-input {
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: 12.5px;
+}
+.storage-actions {
+  flex-wrap: wrap;
+}
+.storage-alert {
+  font-size: 13px;
+}
+[data-theme='dark'] .storage-edit {
+  border-bottom-color: var(--zinc-800);
 }
 </style>

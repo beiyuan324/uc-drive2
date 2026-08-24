@@ -14,14 +14,38 @@ function resolveDataDir() {
 }
 
 export const DATA_DIR = resolveDataDir();
-export const STORAGE_DIR = process.env.UC_DRIVE2_STORAGE_DIR
-  ? path.resolve(process.env.UC_DRIVE2_STORAGE_DIR)
-  : path.join(DATA_DIR, 'storage');
+
+/**
+ * 网盘存储根目录（用户可自定义，持久化在 settings 表 storage_dir，重启时恢复）。
+ * 默认：%APPDATA%/uc-drive2/storage；env UC_DRIVE2_STORAGE_DIR 可覆盖（测试用）。
+ * 运行时通过 setStorageDir() 更新 —— 具名导出为 ESM live binding，import 方自动拿到新值。
+ */
+export function resolveDefaultStorageDir() {
+  return process.env.UC_DRIVE2_STORAGE_DIR
+    ? path.resolve(process.env.UC_DRIVE2_STORAGE_DIR)
+    : path.join(DATA_DIR, 'storage');
+}
+
+export let STORAGE_DIR = resolveDefaultStorageDir();
+export let OFFLINE_DIR = path.join(STORAGE_DIR, 'offline');
+
 export const GOPEED_DIR = path.join(DATA_DIR, 'gopeed');
 export const DB_DIR = path.join(DATA_DIR, 'data');
 export const DB_FILE = path.join(DB_DIR, 'uc-drive.db');
 export const PORT_FILE = path.join(DATA_DIR, 'server.port');
-export const OFFLINE_DIR = path.join(STORAGE_DIR, 'offline');
+
+/** 设置网盘存储根目录（dir 为空字符串时回退默认）。返回解析后的绝对路径。 */
+export function setStorageDir(dir) {
+  const next = path.resolve(dir ? String(dir) : resolveDefaultStorageDir());
+  STORAGE_DIR = next;
+  OFFLINE_DIR = path.join(next, 'offline');
+  return next;
+}
+
+/** 当前网盘存储根目录 */
+export function getStorageDir() {
+  return STORAGE_DIR;
+}
 
 /** gopeed 可执行文件路径：env GOPEED_PATH（Tauri 注入）> 资源目录/工作目录 > 项目 bin */
 export function resolveGopeedPath() {

@@ -1,7 +1,26 @@
 # uc-drive2 交接文档（HANDOVER）
 
-> 最后更新：2026-08-23（第 2 轮交接 / 下载参数+速度+提醒）
+> 最后更新：2026-08-24（第 9 轮 / 网盘存储目录用户自定义）
 > 目的：让任何新会话（或隔天继续的会话）无需重读代码即可接续工作。
+
+---
+
+## 〇、本轮改动：网盘存储目录用户自定义（2026-08-24）
+
+**用户诉求**：存储目录不要固定在 `%APPDATA%/uc-drive2/storage`，要能自定义。
+
+**实现**：
+- 后端 `config.js`：`STORAGE_DIR`/`OFFLINE_DIR` 改为 ESM live binding（`let`），新增 `setStorageDir()`/`getStorageDir()`/`resolveDefaultStorageDir()`；`setStorageDir('')` 回退默认（`%APPDATA%/uc-drive2/storage` 或 env `UC_DRIVE2_STORAGE_DIR`，测试用）
+- 持久化：settings 表 `storage_dir` 键（复用 cookie.js 的 `getSetting/setSetting`）；`index.js` 启动时先读 DB 恢复再 `ensureDirs()`
+- 新 API `PUT /api/settings/storage-dir`（body `{dir, moveFiles}`，dir 空=恢复默认）：写探针验证目标可写 → `moveStorageDir()` 迁移（保留相对结构、跨盘 EXDEV 降级复制+删除）→ 持久化 → 运行时切换；`GET /api/settings` 新增 `defaultStorageDir` 字段
+- `files.js` 新增 `moveStorageDir(db, fromDir, toDir)`（目录先行建结构、文件逐个搬、DB path 同步）
+- 前端 Settings「存储」卡片改为可编辑：路径输入 + 浏览（tauri-plugin-dialog 目录选择器，浏览器 dev 模式降级手动输入）+ 「同时迁移现有文件」勾选 + 保存 + 恢复默认
+- 顺带修复：`gopeed.js` `_spawn()` 未挂 `error` 监听 → 二进制缺失时 unhandled 'error' 拖垮整个后端（index.js 的 try/catch 接不住异步 spawn 错误）；现改为记日志并标记退出，`_waitReady` 超时后后端照常监听
+- Tauri：新增 `tauri-plugin-dialog`（Cargo + npm + `dialog:allow-open` 能力）
+
+**测试**：后端 files.test.js 新增 2 项（切换+迁移+持久化+恢复默认 / moveFiles=false）；`server/tests/smoke-storage-dir.mjs` 真实启动后端全链路冒烟（13 断言：切换/迁移/重启持久化/恢复默认，含真实 gopeed）；后端 42 过 1 跳过 1 网络项失败（pre-existing，与本次无关）；前端 26 项全过；vue-tsc 零错误；`server-dist/server.js` 已重新 esbuild。
+
+**注意**：改完存储目录后 `server.port` 仍在 `%APPDATA%/uc-drive2/`（数据目录不变，只有网盘根可自定义）。迁移时旧根的 `offline/` 暂存目录不搬（活动下载照常完成，完成后落入新根）。
 
 ---
 

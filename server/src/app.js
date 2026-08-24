@@ -2,12 +2,12 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
-import { STORAGE_DIR, GOPEED_DIR, DATA_DIR } from './config.js';
+import { GOPEED_DIR, DATA_DIR, getStorageDir, setStorageDir, resolveDefaultStorageDir, ensureDirs } from './config.js';
 import * as fileSvc from './services/files.js';
 import { TMP_TORRENT_DIR } from './services/tasks.js';
 import * as ucSvc from './services/uc.js';
-import { getUcCookie, setUcCookie, hasUcCookie } from './services/cookie.js';
-import { isPreviewable } from './util/fsx.js';
+import { getUcCookie, setUcCookie, hasUcCookie, getSetting, setSetting } from './services/cookie.js';
+import { isPreviewable, normPath } from './util/fsx.js';
 
 /**
  * Express 应用工厂。仅监听 127.0.0.1，无鉴权（单用户本地网盘）。
@@ -71,17 +71,53 @@ export function createApp({ db, gopeed, tasks }) {
 
   // ---------- 健康 & 设置 ----------
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, gopeed: gopeed.ready, version: '1.0.0' });
+    res.json({ ok: true, gopeed: gopeed.ready, version: '1.1.0' });
   });
 
-  app.get('/api/settings', (_req, res) => {
-    res.json({
-      storageDir: STORAGE_DIR,
+  function settingsPayload() {
+    return {
+      storageDir: getStorageDir(),
+      defaultStorageDir: resolveDefaultStorageDir(),
       dataDir: DATA_DIR,
       gopeedDir: GOPEED_DIR,
       gopeed: { running: gopeed.ready, port: gopeed.port, base: gopeed.base },
       download: tasks.getConfig(),
-    });
+    };
+  }
+
+  app.get('/api/settings', (_req, res) => {
+    res.json(settingsPayload());
+  });
+
+  // 切换网盘存储目录（用户自定义，持久化到 settings 表，重启后恢复）
+  // body: { dir: string, moveFiles?: boolean }；dir 为空字符串 = 恢复默认目录
+  app.put('/api/settings/storage-dir', (req, res, next) => {
+    const { dir, moveFiles } = req.body || {};
+    const raw = typeof dir === 'string' ? dir.trim() : '';
+    try {
+      const current = getStorageDir();
+      const target = raw ? path.resolve(raw) : resolveDefaultStorageDir();
+      if (normPath(target) === normPath(current)) {
+        return res.json({ ...settingsPayload(), changed: false });
+      }
+      // 目标目录必须可创建、可写（写探针避免选到只读/网络异常目录）
+      fs.mkdirSync(target, { recursive: true });
+      const probe = path.join(target, `.ucd2-write-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      fs.writeFileSync(probe, 'ok');
+      fs.rmSync(probe, { force: true });
+
+      // 默认把当前存储根下已登记的文件搬到新目录（保留相对结构，支持跨盘）
+      let movedFiles = 0;
+      if (moveFiles !== false) {
+        movedFiles = fileSvc.moveStorageDir(db, current, target);
+      }
+      setSetting(db, 'storage_dir', raw);
+      setStorageDir(raw);
+      ensureDirs();
+      res.json({ ...settingsPayload(), changed: true, movedFiles });
+    } catch (err) {
+      next(err);
+    }
   });
 
   // ---------- 文件 ----------
@@ -308,7 +344,8 @@ export function createApp({ db, gopeed, tasks }) {
   // ---------- 错误处理 ----------
   app.use((err, _req, res, _next) => {
     if (err?.code === 'ENOENT') return res.status(404).json({ error: err.message || '不存在' });
-    if (err?.code === 'EPERM' || err?.code === 'EINVAL') return res.status(400).json({ error: err.message });
+    if (err?.code === 'EBUSY') return res.status(400).json({ error: err.message || '文件正被占用，请稍后重试' });
+    if (err?.code === 'EPERM' || err?.code === 'EINVAL' || err?.code === 'EACCES') return res.status(400).json({ error: err.message });
     if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: '文件过大' });
     res.status(500).json({ error: err?.message || '服务器错误' });
   });

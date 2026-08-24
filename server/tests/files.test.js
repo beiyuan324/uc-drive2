@@ -1,6 +1,6 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import fs, { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -12,6 +12,7 @@ process.env.UC_DRIVE2_STORAGE_DIR = path.join(DATA_DIR, 'storage');
 const { createApp } = await import('../src/app.js');
 const { openDb } = await import('../src/db.js');
 const { STORAGE_DIR } = await import('../src/config.js');
+const { normPath } = await import('../src/util/fsx.js');
 const { GopeedManager } = await import('../src/services/gopeed.js');
 const { TaskService } = await import('../src/services/tasks.js');
 
@@ -281,6 +282,72 @@ test('浏览目录不刷新目录修改时间', async () => {
   await api('GET', '/api/files?parent=root');
   const second = (await api('GET', `/api/files/${dir.body.id}`)).body;
   assert.equal(first.updated_at, second.updated_at, '浏览不应改变 updated_at');
+});
+
+test('切换网盘存储目录：迁移文件 + 持久化 + 恢复默认', async () => {
+  // 准备：根下建目录 + 上传一个文件
+  const buf = new TextEncoder().encode('storage move test');
+  const form = new FormData();
+  form.append('parent', 'root');
+  form.append('files', new Blob([buf]), '迁移测试.txt');
+  const { body: [row] } = await api('POST', '/api/files', { body: form });
+
+  const newDir = path.join(DATA_DIR, 'custom-storage');
+  const res = await api('PUT', '/api/settings/storage-dir', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir: newDir, moveFiles: true }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.changed, true);
+  assert.ok(res.body.movedFiles >= 1, '已有文件应全部迁移');
+  assert.equal(normPath(res.body.storageDir), normPath(newDir));
+  assert.equal(normPath(res.body.defaultStorageDir), normPath(path.join(DATA_DIR, 'storage')));
+
+  // 文件已搬到新目录且内容不变、DB 路径已更新
+  const moved = await api('GET', `/api/files/${row.id}`);
+  assert.ok(moved.body.path.startsWith(normPath(newDir)));
+  const disk = await (await fetch(base + `/api/files/${row.id}/download`)).arrayBuffer();
+  assert.equal(new TextDecoder().decode(disk), 'storage move test');
+  assert.equal(fs.existsSync(path.join(DATA_DIR, 'storage', '迁移测试.txt')), false);
+
+  // 新目录列表能看到文件
+  const list = await api('GET', '/api/files?parent=root');
+  assert.ok(list.body.some(f => f.name === '迁移测试.txt'));
+
+  // 相同目录幂等：changed=false 不报错
+  const same = await api('PUT', '/api/settings/storage-dir', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir: newDir, moveFiles: true }),
+  });
+  assert.equal(same.body.changed, false);
+
+  // 空 dir = 恢复默认，文件迁回
+  const back = await api('PUT', '/api/settings/storage-dir', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir: '', moveFiles: true }),
+  });
+  assert.equal(back.body.changed, true);
+  assert.equal(normPath(back.body.storageDir), normPath(path.join(DATA_DIR, 'storage')));
+  const backRow = await api('GET', `/api/files/${row.id}`);
+  assert.ok(backRow.body.path.startsWith(normPath(path.join(DATA_DIR, 'storage'))));
+  const backDisk = await (await fetch(base + `/api/files/${row.id}/download`)).arrayBuffer();
+  assert.equal(new TextDecoder().decode(backDisk), 'storage move test');
+});
+
+test('切换存储目录：moveFiles=false 不迁移文件，仅切换根', async () => {
+  const newDir = path.join(DATA_DIR, 'custom-storage-nomove');
+  const res = await api('PUT', '/api/settings/storage-dir', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir: newDir, moveFiles: false }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.changed, true);
+  assert.equal(res.body.movedFiles, 0);
+  // 切回默认，避免影响其他用例
+  await api('PUT', '/api/settings/storage-dir', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir: '', moveFiles: true }),
+  });
 });
 
 test('临时 torrent 上传与清理', async () => {

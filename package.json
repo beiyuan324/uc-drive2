@@ -1,6 +1,6 @@
 {
   "name": "uc-drive2",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "uc-drive2 单用户桌面网盘（Tauri + Vue3 + Express + gopeed）",
   "scripts": {
@@ -15,6 +15,7 @@
   "dependencies": {
     "@phosphor-icons/vue": "^2.1.7",
     "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
     "geist": "^1.7.2",
     "naive-ui": "^2.42.0",
     "pinia": "^3.0.4",

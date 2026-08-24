@@ -170,7 +170,20 @@ export const api = {
   // 系统
   health: () => req<{ ok: boolean; gopeed: boolean; version: string }>('GET', '/api/health'),
   settings: () => req<SettingsInfo>('GET', '/api/settings'),
+  /** 切换网盘存储目录（dir 为空 = 恢复默认；moveFiles 默认 true 迁移现有文件） */
+  setStorageDir: (dir: string, moveFiles = true) =>
+    req<SettingsInfo>('PUT', '/api/settings/storage-dir', { dir, moveFiles }),
 };
+
+/** 在系统文件管理器中定位/打开文件（Tauri 环境；浏览器开发模式返回 false） */
+export async function revealInFolder(path: string): Promise<boolean> {
+  try {
+    await invoke('reveal_in_folder', { path });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function formatSize(bytes: number): string {
   if (!bytes) return '0 B';

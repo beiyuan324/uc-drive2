@@ -105,6 +105,13 @@ export class GopeedManager {
     writeBackendState(proc.pid);
     proc.stdout?.on('data', d => this.log.log?.(`[gopeed] ${String(d).trim()}`));
     proc.stderr?.on('data', d => this.log.error?.(`[gopeed] ${String(d).trim()}`));
+    // 二进制缺失/启动失败：记日志并标记退出，避免未处理 error 事件拖垮整个后端
+    proc.on('error', (err) => {
+      this.log.error?.(`[gopeed] 启动失败: ${err.message}`);
+      this.proc = null;
+      this.base = null;
+      this._emit({ type: 'exit', code: -1, signal: null, error: err });
+    });
     proc.on('exit', (code, signal) => {
       this.proc = null;
       this.base = null;

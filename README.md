@@ -15,7 +15,8 @@ uc-drive2.exe (Tauri)
 - 后端仅监听 `127.0.0.1`，端口被占用时自动 +1（探测式分配）
 - **CORS 已内置**：WebView（origin=tauri.localhost）→ 127.0.0.1 属跨域，后端统一放行（含 Range 头）
 - 退出级联关闭：托盘「退出」→ taskkill 进程树（node 及 gopeed）
-- 数据目录：`%APPDATA%/uc-drive2/`（`storage/` 网盘根、`gopeed/` 引擎数据、`data/uc-drive.db`、`access.log` 访问日志）
+- 数据目录：`%APPDATA%/uc-drive2/`（`storage/` 默认网盘根、`gopeed/` 引擎数据、`data/uc-drive.db`、`access.log` 访问日志）
+- **网盘存储目录可自定义**：设置页可改为任意磁盘路径（支持目录选择器），保存时可选把现有文件迁移到新目录（支持跨盘），重启后自动恢复；"恢复默认目录"一键回到 `%APPDATA%/uc-drive2/storage`
 - 离线任务下载到 `storage/offline/<taskId>/`，完成后自动登记进文件树
 
 ## 功能
@@ -29,7 +30,7 @@ uc-drive2.exe (Tauri)
   速度、暂停/继续/删除；gopeed 异常退出自动换端口重启并恢复任务；下载完成弹系统通知
 - **历史记录**：已完成/失败任务归档，支持重新下载、复制链接、清空
 - **系统托盘**：关闭窗口最小化到托盘后台运行，托盘菜单（显示窗口/下载管理/退出）
-- **设置**：存储目录展示、服务状态（后端/gopeed 端口）、UC Cookie（AES-256 加密存储）、
+- **设置**：存储目录自定义（浏览/输入/迁移文件/恢复默认）、服务状态（后端/gopeed 端口）、UC Cookie（AES-256 加密存储）、
   主题（light/dark/auto）
 
 ## 开发

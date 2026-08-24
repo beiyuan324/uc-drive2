@@ -54,5 +54,12 @@ export const useSettingsStore = defineStore('settings', () => {
     return cfg;
   }
 
-  return { themeMode, systemDark, isDark, info, downloadConfig, applyTheme, systemThemeListener, load, saveDownloadConfig };
+  /** 切换网盘存储目录（后端迁移文件并持久化），成功后同步本地信息 */
+  async function saveStorageDir(dir: string, moveFiles = true) {
+    const next = await api.setStorageDir(dir, moveFiles);
+    if (next) info.value = next;
+    return next;
+  }
+
+  return { themeMode, systemDark, isDark, info, downloadConfig, applyTheme, systemThemeListener, load, saveDownloadConfig, saveStorageDir };
 });

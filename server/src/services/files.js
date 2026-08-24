@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { STORAGE_DIR, OFFLINE_DIR } from '../config.js';
 import { normPath, assertInside, uniquePath, mimeOf, scanDir } from '../util/fsx.js';
 
@@ -91,6 +92,50 @@ function pruneMissing(db, dirPath) {
   }
 }
 
+/** 跨卷移动（EXDEV 时降级为复制+删除）；同卷 renameSync 原子移动 */
+function movePath(src, dest) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(src, dest);
+      fs.rmSync(src, { force: true });
+    } else {
+      throw err;
+    }
+  }
+}
+
+/**
+ * 迁移存储根目录：把 fromDir 下已登记的文件/目录搬到 toDir（保留相对结构），
+ * 并同步更新 DB 中所有条目的 path。offline 暂存目录不属于文件树，不迁移。
+ * 返回迁移的文件数。
+ */
+export function moveStorageDir(db, fromDir, toDir) {
+  const oldRoot = normPath(fromDir);
+  const newRoot = normPath(toDir);
+  if (oldRoot === newRoot) return 0;
+  fs.mkdirSync(newRoot, { recursive: true });
+
+  // 目录行先建结构（ORDER BY is_dir DESC 确保父目录先处理），文件再移动
+  const rows = db.prepare('SELECT * FROM files ORDER BY is_dir DESC, id ASC').all();
+  let moved = 0;
+  for (const r of rows) {
+    const rel = path.relative(fromDir, r.path);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) continue; // 存储根之外的条目不动
+    const dest = normPath(path.join(newRoot, rel));
+    if (r.is_dir) {
+      fs.mkdirSync(dest, { recursive: true });
+    } else if (fs.existsSync(r.path)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      movePath(r.path, dest);
+      moved += 1;
+    }
+    db.prepare('UPDATE files SET path = ? WHERE id = ?').run(dest, r.id);
+  }
+  return moved;
+}
+
 /** 新建目录 */
 export function mkdir(db, name, parentId) {
   const parentPath = resolveDirPath(db, parentId);
@@ -170,7 +215,37 @@ function collectDescendants(db, id) {
   return out;
 }
 
-/** 删除（目录递归） */
+/** 短等待 300ms（Windows 释放文件锁需要时间） */
+function await_short() {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+}
+
+/**
+ * 移动到 Windows 回收站（PowerShell + VisualBasic FileIO，原生 API 不支持回收站）。
+ * 文件/目录均可；失败时抛错（由调用方决定是否回退永久删除）。
+ */
+export function moveToRecycleBin(target) {
+  const esc = String(target).replace(/'/g, "''");
+  const script = [
+    'Add-Type -AssemblyName Microsoft.VisualBasic',
+    `$p = '${esc}'`,
+    'if (Test-Path -LiteralPath $p) {',
+    '  $item = Get-Item -LiteralPath $p',
+    '  if ($item.PSIsContainer) {',
+    '    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, \'OnlyErrorDialogs\', \'SendToRecycleBin\')',
+    '  } else {',
+    '    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, \'OnlyErrorDialogs\', \'SendToRecycleBin\')',
+    '  }',
+    '}',
+  ].join('; ');
+  execFileSync('powershell.exe', ['-NoProfile', '-STA', '-Command', script], {
+    timeout: 60000,
+    windowsHide: true,
+    stdio: 'ignore',
+  });
+}
+
+/** 删除（目录递归）。默认进 Windows 回收站（可恢复）；回收站不可用时回退永久删除 */
 export function remove(db, id) {
   const row = getRow(db, id);
   if (!row) {
@@ -179,7 +254,31 @@ export function remove(db, id) {
     throw err;
   }
   assertInside(STORAGE_DIR, row.path);
-  fs.rmSync(row.path, { recursive: true, force: true });
+  // 1) 优先进回收站（可恢复，符合本地网盘预期）
+  try {
+    moveToRecycleBin(row.path);
+  } catch (recycleErr) {
+    // 2) 回收站失败（极端环境）→ 退化为永久删除；仍失败则给友好错误
+    try {
+      fs.rmSync(row.path, { recursive: true, force: true });
+    } catch (err) {
+      if (err.code === 'EBUSY' || err.code === 'EPERM') {
+        await_short();
+        try {
+          fs.rmSync(row.path, { recursive: true, force: true });
+        } catch (err2) {
+          if (err2.code === 'EBUSY' || err2.code === 'EPERM') {
+            const e = new Error('文件正被占用（可能正在预览或下载中），请稍后重试');
+            e.code = 'EBUSY';
+            throw e;
+          }
+          throw err2;
+        }
+      } else {
+        throw err;
+      }
+    }
+  }
   db.prepare('DELETE FROM files WHERE id = ?').run(row.id);
   return { ok: true };
 }

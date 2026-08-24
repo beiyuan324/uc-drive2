@@ -59,10 +59,15 @@ export interface UcParseResult {
 
 export interface SettingsInfo {
   storageDir: string;
+  /** 默认存储目录（%APPDATA%/uc-drive2/storage，可恢复） */
+  defaultStorageDir?: string;
   dataDir: string;
   gopeedDir: string;
   gopeed: { running: boolean; port: number | null; base: string | null };
   download?: DownloadConfig;
+  /** 切换存储目录的响应字段 */
+  changed?: boolean;
+  movedFiles?: number;
 }
 
 /** 下载参数（后端持久化，应用到 gopeed） */
