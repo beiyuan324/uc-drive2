@@ -370,3 +370,55 @@ test('任务配置 API：POST /api/tasks 透传 connections', async () => {
   const t = await res.json();
   assert.equal(store.get(t.gopeed_id).meta.opts.extra.connections, 70);
 });
+
+test('任务轮询空闲感知：hasSyncWork 随任务状态变化', () => {
+  // 独立 DB 直接操作 tasks 表（hasSyncWork 只读状态，无需真实文件/ gopeed 任务）
+  const db2 = openDb(path.join(DATA_DIR, 'poll-idle.test.db'));
+  const tasks = new TaskService(db2, manager);
+  try {
+    const ts = new Date().toISOString();
+    const ins = () => db2.prepare(
+      "INSERT INTO tasks (source, source_url, status, gopeed_id, target_dir, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)"
+    ).run('url', 'http://x/', 'queued', 'mock-poll', '/tmp', '{}', ts, ts).lastInsertRowid;
+    // 无任务 → false
+    assert.equal(tasks.hasSyncWork(), false);
+    // queued + gopeed_id → true（活动任务，需要同步）
+    const id = ins();
+    assert.equal(tasks.hasSyncWork(), true);
+    // 转 done → false（不再空转轮询）
+    db2.prepare('UPDATE tasks SET status = ? WHERE id = ?').run('done', id);
+    assert.equal(tasks.hasSyncWork(), false, '全部完成/无活动任务时轮询应可跳过');
+    // 转 running → true
+    db2.prepare('UPDATE tasks SET status = ? WHERE id = ?').run('running', id);
+    assert.equal(tasks.hasSyncWork(), true);
+  } finally {
+    db2.close();
+  }
+});
+
+test('startPolling 支持 shouldPoll 钩子：空闲时不请求 gopeed', async () => {
+  // 独立 DB，精确控制活动任务数（只插行，不做真实下载）
+  const db2 = openDb(path.join(DATA_DIR, 'poll-hook.test.db'));
+  const tasks = new TaskService(db2, manager);
+  let calls = 0;
+  const origList = manager.listTasks.bind(manager);
+  manager.listTasks = async () => { calls += 1; return origList(); };
+  try {
+    const ts = new Date().toISOString();
+    // 空闲（无活动任务）：钩子返回 false → 轮询不产生网络请求
+    manager.startPolling(100, () => tasks.hasSyncWork());
+    await new Promise(r => setTimeout(r, 350));
+    assert.equal(calls, 0, '空闲时不应请求 gopeed');
+    // 插入 queued + gopeed_id 行（活动任务）→ 钩子返回 true → 轮询正常持续
+    db2.prepare(
+      "INSERT INTO tasks (source, source_url, status, gopeed_id, target_dir, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)"
+    ).run('url', 'http://example.com/poll-active.bin', 'queued', 'mock-poll-2', '/tmp/poll', '{}', ts, ts);
+    assert.equal(tasks.hasSyncWork(), true);
+    await new Promise(r => setTimeout(r, 400));
+    assert.ok(calls >= 2, `活动任务时轮询应持续请求 gopeed（实际 ${calls} 次）`);
+  } finally {
+    manager.stopPolling();
+    manager.listTasks = origList;
+    db2.close();
+  }
+});

@@ -231,6 +231,37 @@ test('搜索', async () => {
   assert.ok(body.some(f => f.name === '季度报表.xlsx'));
 });
 
+test('目录树 API：单次请求返回完整嵌套结构', async () => {
+  // 结构：甲/子/孙 + 乙（保证大于一层的嵌套）
+  const a = await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '树甲', parent: 'root' }) });
+  const sub = await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '树甲子', parent: a.body.id }) });
+  await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '树甲孙', parent: sub.body.id }) });
+  await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '树乙', parent: 'root' }) });
+
+  const { status, body } = await api('GET', '/api/tree');
+  assert.equal(status, 200);
+  const aNode = body.find(n => n.name === '树甲');
+  assert.ok(aNode, '树应包含 树甲');
+  assert.equal(aNode.children[0].name, '树甲子', '子目录应在 children 中');
+  assert.equal(aNode.children[0].children[0].name, '树甲孙', '孙目录应在深层 children 中');
+  assert.ok(body.some(n => n.name === '树乙'));
+});
+
+test('祖先链 API：一次请求返回根 → 目标全链（面包屑用）', async () => {
+  const root = await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '面包屑甲', parent: 'root' }) });
+  const mid = await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '面包屑乙', parent: root.body.id }) });
+  const leaf = await api('POST', '/api/dirs', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '面包屑丙', parent: mid.body.id }) });
+
+  const { status, body } = await api('GET', `/api/files/${leaf.body.id}/ancestors`);
+  assert.equal(status, 200);
+  assert.deepEqual(body.map(n => n.name), ['面包屑甲', '面包屑乙', '面包屑丙'], '链应从根逐级到自身');
+  assert.equal(body[2].id, leaf.body.id);
+
+  // 不存在的 id → 404
+  const missing = await api('GET', '/api/files/999999/ancestors');
+  assert.equal(missing.status, 404);
+});
+
 test('目录下载被拒绝', async () => {
   const dir = await api('POST', '/api/dirs', {
     headers: { 'Content-Type': 'application/json' },

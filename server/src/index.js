@@ -59,7 +59,7 @@ async function main() {
   } catch (err) {
     log.warn(`[uc-drive2] gopeed 启动失败（离线下载不可用）: ${err.message}`);
   }
-  gopeed.startPolling(2000);
+  gopeed.startPolling(2000, () => tasks.hasSyncWork());
 
   const app = createApp({ db, gopeed, tasks });
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { STORAGE_DIR, OFFLINE_DIR } from '../config.js';
 import { normPath, assertInside, uniquePath, mimeOf, scanDir } from '../util/fsx.js';
 
@@ -58,6 +58,8 @@ export function listDir(db, parentId) {
   const entries = scanDir(dirPath).filter(e => normPath(path.join(dirPath, e.name)) !== normPath(OFFLINE_DIR));
   const existing = childRows(db, parentId);
   const seen = new Set();
+  // 性能：DO UPDATE 带 WHERE 条件 —— 磁盘元数据未变化时整行跳过（不产生 SQLite 写入）。
+  // 此前每次浏览都会对每个条目重写一行（WAL 下也有开销），大目录逐次浏览成本线性累积。
   const upsert = db.prepare(`
     INSERT INTO files (name, parent_id, is_dir, path, size, mime, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -66,20 +68,24 @@ export function listDir(db, parentId) {
       is_dir = excluded.is_dir,
       size = excluded.size,
       mime = excluded.mime,
-      -- 仅在内容元数据实际变化时刷新修改时间（浏览目录不应更新时间）
-      updated_at = CASE
-        WHEN files.size != excluded.size OR files.is_dir != excluded.is_dir OR files.mime != excluded.mime
-        THEN excluded.updated_at ELSE files.updated_at END
+      updated_at = excluded.updated_at
+    WHERE files.name != excluded.name
+       OR files.is_dir != excluded.is_dir
+       OR files.size != excluded.size
+       OR files.mime != excluded.mime
   `);
+  const del = db.prepare('DELETE FROM files WHERE id = ?');
+  const ts = now();
   for (const e of entries) {
     const p = path.join(dirPath, e.name);
-    seen.add(normPath(p));
-    upsert.run(e.name, parentId == null ? null : Number(parentId), e.isDir ? 1 : 0, normPath(p), e.size, e.isDir ? '' : mimeOf(e.name), now(), now());
+    const key = normPath(p);
+    seen.add(key);
+    upsert.run(e.name, parentId == null ? null : Number(parentId), e.isDir ? 1 : 0, key, e.size, e.isDir ? '' : mimeOf(e.name), ts, ts);
   }
   // 删除磁盘上已不存在的直接子项（含其递归后代）
   for (const r of existing) {
     if (!seen.has(r.path)) {
-      db.prepare('DELETE FROM files WHERE id = ?').run(r.id);
+      del.run(r.id);
     }
   }
   return childRows(db, parentId);
@@ -215,16 +221,18 @@ function collectDescendants(db, id) {
   return out;
 }
 
-/** 短等待 300ms（Windows 释放文件锁需要时间） */
+/** 短等待（Windows 释放文件锁需要时间） */
 function await_short() {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+  return new Promise(r => setTimeout(r, 300));
 }
 
 /**
  * 移动到 Windows 回收站（PowerShell + VisualBasic FileIO，原生 API 不支持回收站）。
  * 文件/目录均可；失败时抛错（由调用方决定是否回退永久删除）。
+ * 异步执行：execFileSync 会阻塞整个事件循环（PowerShell 启动慢则全应用卡顿），
+ * 改为异步后删除期间下载进度轮询 / 健康检查 / 其他请求照常响应。
  */
-export function moveToRecycleBin(target) {
+function moveToRecycleBin(target) {
   const esc = String(target).replace(/'/g, "''");
   const script = [
     'Add-Type -AssemblyName Microsoft.VisualBasic',
@@ -238,15 +246,17 @@ export function moveToRecycleBin(target) {
     '  }',
     '}',
   ].join('; ');
-  execFileSync('powershell.exe', ['-NoProfile', '-STA', '-Command', script], {
-    timeout: 60000,
-    windowsHide: true,
-    stdio: 'ignore',
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-STA', '-Command', script], {
+      timeout: 60000,
+      windowsHide: true,
+      maxBuffer: 1 * 1024 * 1024,
+    }, err => (err ? reject(err) : resolve()));
   });
 }
 
 /** 删除（目录递归）。默认进 Windows 回收站（可恢复）；回收站不可用时回退永久删除 */
-export function remove(db, id) {
+export async function remove(db, id) {
   const row = getRow(db, id);
   if (!row) {
     const err = new Error('文件不存在');
@@ -256,14 +266,14 @@ export function remove(db, id) {
   assertInside(STORAGE_DIR, row.path);
   // 1) 优先进回收站（可恢复，符合本地网盘预期）
   try {
-    moveToRecycleBin(row.path);
+    await moveToRecycleBin(row.path);
   } catch (recycleErr) {
     // 2) 回收站失败（极端环境）→ 退化为永久删除；仍失败则给友好错误
     try {
       fs.rmSync(row.path, { recursive: true, force: true });
     } catch (err) {
       if (err.code === 'EBUSY' || err.code === 'EPERM') {
-        await_short();
+        await await_short();
         try {
           fs.rmSync(row.path, { recursive: true, force: true });
         } catch (err2) {
@@ -305,11 +315,30 @@ export function search(db, q, limit = 50) {
   `).all(like, limit).map(toDto);
 }
 
-/** 计算目录树（用于移动对话框） */
+/** 计算目录树（用于移动对话框）。单次查询全量目录 + 内存组装，避免逐层 N+1 查询 */
 export function tree(db, parentId = null) {
-  const rows = childRows(db, parentId).filter(r => r.is_dir);
-  return rows.map(r => ({
+  const dirs = db.prepare('SELECT id, name, path, parent_id FROM files WHERE is_dir = 1 ORDER BY name').all();
+  const byParent = new Map();
+  for (const r of dirs) {
+    const p = r.parent_id == null ? null : Number(r.parent_id);
+    if (!byParent.has(p)) byParent.set(p, []);
+    byParent.get(p).push(r);
+  }
+  const build = pid => (byParent.get(pid) || []).map(r => ({
     id: r.id, name: r.name, path: r.path,
-    children: tree(db, r.id),
+    children: build(r.id),
   }));
+  return build(parentId == null ? null : Number(parentId));
+}
+
+/** 祖先链（含自身，根 → 目标），一次性查询，供面包屑使用 */
+export function ancestors(db, id) {
+  const out = [];
+  let row = getRow(db, Number(id));
+  if (!row) return null;
+  while (row) {
+    out.unshift(toDto(row));
+    row = row.parent_id == null ? null : getRow(db, row.parent_id);
+  }
+  return out;
 }

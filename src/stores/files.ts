@@ -49,17 +49,11 @@ export const useFilesStore = defineStore('files', () => {
     error.value = '';
     try {
       items.value = await api.listFiles(currentDir.value);
-      // 重建面包屑
+      // 重建面包屑：一次祖先链查询（根 → 当前目录），避免逐级 N 次请求
       if (currentDir.value == null) {
         breadcrumbs.value = [];
       } else {
-        const chain: FileNode[] = [];
-        let node: FileNode | null = await api.getFile(currentDir.value);
-        while (node) {
-          chain.unshift(node);
-          node = node.parent_id == null ? null : await api.getFile(node.parent_id);
-        }
-        breadcrumbs.value = chain;
+        breadcrumbs.value = await api.ancestors(currentDir.value);
       }
     } catch (e) {
       error.value = (e as Error).message;

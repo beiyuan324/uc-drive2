@@ -17,8 +17,10 @@ fn port_file_path() -> PathBuf {
 }
 
 /// 读取后端实际监听端口（node 启动后异步写入，这里轮询等待）
+/// async：同步命令里的 std::thread::sleep 会占用线程（最坏 10s，窗口启动可能卡白屏），
+/// 改异步后用 tokio 定时器等待，不阻塞任何线程。
 #[tauri::command]
-fn get_server_port() -> Result<u16, String> {
+async fn get_server_port() -> Result<u16, String> {
     let path = port_file_path();
     for _ in 0..100 {
         if let Ok(s) = fs::read_to_string(&path) {
@@ -26,7 +28,7 @@ fn get_server_port() -> Result<u16, String> {
                 return Ok(port);
             }
         }
-        std::thread::sleep(Duration::from_millis(100));
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
     Err("后端端口文件未就绪".into())
 }

@@ -22,9 +22,14 @@ onMounted(() => {
   settings.load();
 });
 
+// 全局搜索：输入防抖 250ms（每键一声请求会造成后端 LIKE 扫描 + 下拉重渲染抖动）
+let searchDebounce = 0;
 watch(
   () => files.searchQuery,
-  () => files.doSearch(),
+  () => {
+    window.clearTimeout(searchDebounce);
+    searchDebounce = window.setTimeout(() => files.doSearch(), 250);
+  },
 );
 
 const menuOptions = [

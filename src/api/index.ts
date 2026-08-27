@@ -99,6 +99,8 @@ export const api = {
   listFiles: (parent: number | null) =>
     req<FileNode[]>('GET', '/api/files' + (parent == null ? '?parent=root' : `?parent=${parent}`)),
   getFile: (id: number) => req<FileNode>('GET', `/api/files/${id}`),
+  /** 祖先链（含自身，根 → 目标），一次请求拿全面包屑 */
+  ancestors: (id: number) => req<FileNode[]>('GET', `/api/files/${id}/ancestors`),
   mkdir: (name: string, parent: number | null) =>
     req<FileNode>('POST', '/api/dirs', { name, parent: parent ?? 'root' }),
   rename: (id: number, patch: { name?: string; parent?: number | null }) =>

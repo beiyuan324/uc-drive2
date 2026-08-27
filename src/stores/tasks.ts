@@ -8,9 +8,30 @@ export const useTasksStore = defineStore('tasks', () => {
   const loading = ref(false);
   const pollTimer = ref<number | null>(null);
 
+  /** 轮询合并：逐条比对关键字段，全等时保留旧数组引用（组件不重渲染）。
+   *  后端仅在状态/进度/速度/错误实际变化时才更新行（updated_at 随之变化），
+   *  因此字段全等 = 无变化，直接跳过赋值可避免轮询期间整页任务列表反复 patch。 */
+  function applyTasks(next: TaskItem[]) {
+    const cur = tasks.value;
+    if (cur.length === next.length) {
+      let same = true;
+      for (let i = 0; i < next.length; i += 1) {
+        const a = cur[i];
+        const b = next[i];
+        if (a.id !== b.id || a.status !== b.status || a.progress !== b.progress
+          || a.speed !== b.speed || a.error !== b.error || a.updated_at !== b.updated_at) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    tasks.value = next;
+  }
+
   async function refresh() {
     try {
-      tasks.value = await api.listTasks();
+      applyTasks(await api.listTasks());
     } catch { /* 后端暂不可达 */ }
   }
 
