@@ -8,6 +8,9 @@
     "dev:server": "node server/src/index.js",
     "dev:web": "vite",
     "build": "vite build",
+    "build:server": "esbuild server/src/index.js --bundle --platform=node --format=cjs --outfile=server-dist/server.js",
+    "build:app": "npm run build && npm run build:server",
+    "tauri:build": "npm run build:app && tauri build",
     "test": "npm --prefix server test",
     "test:unit": "vitest run",
     "tauri": "tauri"

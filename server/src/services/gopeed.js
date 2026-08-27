@@ -225,16 +225,25 @@ export class GopeedManager {
 
   // ---------- 轮询同步 ----------
 
-  /** 启动任务轮询（每 2s 拉全量，回调每条任务） */
-  startPolling(intervalMs = 2000) {
+  /** 启动任务轮询（每 2s 拉全量，回调每条任务）
+   *  shouldPoll：可选钩子，返回 false 时跳过本轮（无任务空转时不产生 gopeed HTTP 请求） */
+  startPolling(intervalMs = 2000, shouldPoll = null) {
     if (this._pollTimer) return;
     this._pollTimer = setInterval(async () => {
+      if (shouldPoll && !shouldPoll()) return;
       try {
         const tasks = await this.listTasks();
         this._emit({ type: 'tasks', tasks });
       } catch { /* gopeed 暂不可用，下轮再试 */ }
     }, intervalMs);
     this._pollTimer.unref?.();
+  }
+
+  stopPolling() {
+    if (this._pollTimer) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
   }
 
   mapStatus(s) {

@@ -92,6 +92,14 @@ export class TaskService {
     }
   }
 
+  /** 是否还有需要从 gopeed 同步的任务。
+   *  全空/全部完成/暂停时轮询跳过（保持 2s 心跳，但不产生 gopeed HTTP 请求与数据库同步开销） */
+  hasSyncWork() {
+    return this.db.prepare(
+      "SELECT 1 FROM tasks WHERE gopeed_id != '' AND status IN ('queued','running') LIMIT 1"
+    ).get() != null;
+  }
+
   list() {
     return this.db.prepare('SELECT * FROM tasks ORDER BY id DESC').all()
       .map(r => this._row(r));
@@ -317,20 +325,28 @@ export class TaskService {
   async _syncFromGopeed(tasks) {
     const byId = new Map(tasks.map(t => [t.id, t]));
     const rows = this.db.prepare("SELECT * FROM tasks WHERE gopeed_id != ''").all();
+    // 语句只 prepare 一次（每 2s 一轮、每行都要 UPDATE，重复 prepare 是纯浪费）
+    const updMeta = this.db.prepare('UPDATE tasks SET metadata = ? WHERE id = ?');
+    const setCookieExpired = this.db.prepare("UPDATE tasks SET status = 'cookie_expired', error = 'UC Cookie 已失效，请在设置中更新', updated_at = ? WHERE id = ?");
+    const setError = this.db.prepare('UPDATE tasks SET status = ?, error = ?, updated_at = ? WHERE id = ?');
+    const updTask = this.db.prepare(`
+      UPDATE tasks SET status = ?, progress = ?, speed = ?, finished_at = COALESCE(?, finished_at), error = ?, updated_at = ?
+      WHERE id = ? AND (status != ? OR progress != ? OR speed != ? OR error != ?)
+    `);
     for (const r of rows) {
       const g = byId.get(r.gopeed_id);
       if (!g) continue;
+      const meta = this._parseMeta(r);
       const status = this.gopeed.mapStatus(g.status);
       // UC 任务错误分类：cookie 失效 / 直链过期可重试
       if (status === 'error' && r.status !== 'cookie_expired') {
-        const kind = await this._classifyUcError({ ...r, metadata: this._parseMeta(r) }, g);
+        const kind = await this._classifyUcError({ ...r, metadata: meta }, g);
         if (kind === 'cookie_expired') {
-          this.db.prepare("UPDATE tasks SET status = 'cookie_expired', error = 'UC Cookie 已失效，请在设置中更新', updated_at = ? WHERE id = ?")
-            .run(now(), r.id);
+          setCookieExpired.run(now(), r.id);
           continue;
         }
         if (kind === 'retry') {
-          const refreshed = await this._refreshUcUrl({ ...r, metadata: this._parseMeta(r) });
+          const refreshed = await this._refreshUcUrl({ ...r, metadata: meta });
           if (refreshed) continue;
         }
       }
@@ -339,19 +355,15 @@ export class TaskService {
         try {
           this._registerIntoTree(r.id, g.name || '离线任务');
         } catch (err) {
-          this.db.prepare("UPDATE tasks SET status = 'error', error = ?, updated_at = ? WHERE id = ?")
-            .run(`文件登记失败: ${err.message || err}`, now(), r.id);
+          setError.run('error', `文件登记失败: ${err.message || err}`, now(), r.id);
           continue;
         }
       }
       const total = g.size || g.meta?.res?.size || 0;
       // 记录任务总大小到 metadata（仅首次，供前端剩余量/剩余时间展示）
-      if (total > 0) {
-        const meta = this._parseMeta(r);
-        if (!meta.total) {
-          meta.total = total;
-          this.db.prepare('UPDATE tasks SET metadata = ? WHERE id = ?').run(JSON.stringify(meta), r.id);
-        }
+      if (total > 0 && !meta.total) {
+        meta.total = total;
+        updMeta.run(JSON.stringify(meta), r.id);
       }
       // 真实进度：gopeed 的 progress.downloaded 字段在多连接分片下载时准确（实测与磁盘写入同步），
       // 不要用 fsutil queryValidData —— 其返回值是「最高已写偏移+1」，gopeed 先写尾部分片时
@@ -375,10 +387,7 @@ export class TaskService {
       const patch = { status, progress, speed };
       if (status === 'done') { patch.finished_at = now(); patch.error = ''; }
       if (status === 'error') patch.error = '下载失败';
-      this.db.prepare(`
-        UPDATE tasks SET status = ?, progress = ?, speed = ?, finished_at = COALESCE(?, finished_at), error = ?, updated_at = ?
-        WHERE id = ? AND (status != ? OR progress != ? OR speed != ? OR error != ?)
-      `).run(status, progress, speed, patch.finished_at || null, patch.error ?? r.error, now(), r.id, status, progress, speed, patch.error ?? r.error);
+      updTask.run(status, progress, speed, patch.finished_at || null, patch.error ?? r.error, now(), r.id, status, progress, speed, patch.error ?? r.error);
     }
   }
 

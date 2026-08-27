@@ -61,7 +61,12 @@ export function isPreviewable(mime) {
   return mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'text/plain' || mime === 'text/markdown';
 }
 
-/** 目录扫描：返回 [{name, isDir, size}]，跳过隐藏系统文件 */
+/**
+ * 目录扫描：返回 [{name, isDir, size}]，跳过隐藏系统文件。
+ * 性能说明：目录 size 恒为 0 —— 不递归计算子树大小。
+ * 目录大小此前是每次浏览都同步递归整棵子树（列表越深越慢，事件循环被阻塞），
+ * 而 UI 对目录只显示「目录/—」，从不展示大小，纯属浪费。
+ */
 export function scanDir(dirPath) {
   const out = [];
   let entries;
@@ -70,27 +75,16 @@ export function scanDir(dirPath) {
   } catch {
     return out;
   }
+  const statCache = fs.statSync.bind(fs);
   for (const e of entries) {
     if (e.name.startsWith('.')) continue;
     let size = 0;
-    if (e.isDirectory()) {
-      try { size = dirSize(path.join(dirPath, e.name)); } catch { size = 0; }
-    } else if (e.isFile()) {
-      try { size = fs.statSync(path.join(dirPath, e.name)).size; } catch { size = 0; }
+    if (e.isFile()) {
+      try { size = statCache(path.join(dirPath, e.name)).size; } catch { size = 0; }
     }
     out.push({ name: e.name, isDir: e.isDirectory(), size });
   }
   return out.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name, 'zh') : a.isDir ? -1 : 1));
-}
-
-function dirSize(dir) {
-  let total = 0;
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) total += dirSize(p);
-    else if (e.isFile()) total += fs.statSync(p).size;
-  }
-  return total;
 }
 
 /** 递归收集目录下所有文件的绝对路径 */

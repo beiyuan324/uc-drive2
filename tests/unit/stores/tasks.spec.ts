@@ -49,6 +49,26 @@ describe('tasks store', () => {
     expect(store.tasks[0].name).toBe('测试下载');
   });
 
+  it('轮询幂等合并：数据未变化时保留旧数组引用（避免每 2s 全量重渲染）', async () => {
+    const store = useTasksStore();
+    await store.refresh();
+    const first = store.tasks;
+    // 完全相同的数据再次返回 → 不替换引用
+    await store.refresh();
+    expect(store.tasks).toBe(first);
+    // 任一关键字段变化 → 替换
+    listTasks.mockResolvedValue([{ ...taskFixture, progress: 43 }]);
+    await store.refresh();
+    expect(store.tasks).not.toBe(first);
+    expect(store.tasks[0].progress).toBe(43);
+    // 条数变化 → 替换
+    const second = store.tasks;
+    listTasks.mockResolvedValue([{ ...taskFixture, id: 1 }, { ...taskFixture, id: 2 }]);
+    await store.refresh();
+    expect(store.tasks).not.toBe(second);
+    expect(store.tasks).toHaveLength(2);
+  });
+
   it('create() 调用 api 并刷新列表', async () => {
     createTask.mockResolvedValue({ ...taskFixture, id: 2 });
     const store = useTasksStore();

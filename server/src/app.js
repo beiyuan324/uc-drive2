@@ -32,6 +32,30 @@ function parseRange(rangeHeader, size) {
   return { start, end };
 }
 
+/** 访问日志缓冲（模块级单例：缓冲行 + 3s 批量落盘，多 app 实例共享同一缓冲/定时器） */
+let _accessLog = null;
+function accessLog() {
+  if (_accessLog) return _accessLog;
+  const ACCESS_LOG = path.join(DATA_DIR, 'access.log');
+  const buf = [];
+  const flush = () => {
+    if (buf.length === 0) return;
+    const chunk = buf.join('');
+    buf.length = 0;
+    try { fs.appendFileSync(ACCESS_LOG, chunk); } catch { /* 日志失败不影响服务 */ }
+  };
+  const timer = setInterval(flush, 3000);
+  timer.unref?.();
+  process.on('exit', flush);
+  _accessLog = {
+    push(line) {
+      buf.push(line);
+      if (buf.length >= 1024) flush();
+    },
+  };
+  return _accessLog;
+}
+
 export function createApp({ db, gopeed, tasks }) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
@@ -48,14 +72,14 @@ export function createApp({ db, gopeed, tasks }) {
   });
 
   // 诊断：访问日志（%APPDATA%/uc-drive2/access.log，便于排查前端请求是否到达）
-  const ACCESS_LOG = path.join(DATA_DIR, 'access.log');
+  // 性能：逐请求 appendFileSync 会阻塞事件循环（每次请求都同步打开/写入/关闭文件），
+  // 改为内存缓冲 + 定时批量落盘（3s 一次，缓冲≥1024 行立即刷），高频轮询不再产生同步磁盘 IO。
   app.use((req, _res, next) => {
     try {
-      fs.appendFileSync(ACCESS_LOG, `${new Date().toISOString()} ${req.method} ${req.originalUrl}\n`);
+      accessLog().push(`${new Date().toISOString()} ${req.method} ${req.originalUrl}\n`);
     } catch { /* 日志失败不影响服务 */ }
     next();
   });
-
   const upload = multer({
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => {
@@ -132,6 +156,13 @@ export function createApp({ db, gopeed, tasks }) {
     res.json(fileSvc.toDto(row));
   });
 
+  // 祖先链（含自身，根 → 目标）：一次请求拿全面包屑，替代前端逐级 N 次查询
+  app.get('/api/files/:id/ancestors', (req, res) => {
+    const chain = fileSvc.ancestors(db, req.params.id);
+    if (!chain) return res.status(404).json({ error: '文件不存在' });
+    res.json(chain);
+  });
+
   app.get('/api/tree', (_req, res) => {
     res.json(fileSvc.tree(db));
   });
@@ -202,8 +233,13 @@ export function createApp({ db, gopeed, tasks }) {
     res.json(fileSvc.toDto(row));
   });
 
-  app.delete('/api/files/:id', (req, res) => {
-    res.json(fileSvc.remove(db, req.params.id));
+  app.delete('/api/files/:id', async (req, res, next) => {
+    try {
+      // 异步删除：回收站调用不走同步 PowerShell，避免阻塞事件循环
+      res.json(await fileSvc.remove(db, req.params.id));
+    } catch (err) {
+      next(err);
+    }
   });
 
   // ---------- 离线任务 ----------
