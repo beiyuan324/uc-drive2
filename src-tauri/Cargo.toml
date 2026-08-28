@@ -1,6 +1,6 @@
 [package]
 name = "uc-drive2"
-version = "1.1.0"
+version = "1.2.0"
 description = "uc-drive2 单用户桌面网盘"
 authors = ["uc-drive2"]
 edition = "2021"
