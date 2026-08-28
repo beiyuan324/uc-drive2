@@ -279,7 +279,7 @@ onActivated(refreshAll);
         <n-card title="关于" class="card">
           <n-descriptions :column="1" label-placement="left" size="small">
             <n-descriptions-item label="版本">
-              <span class="mono">{{ health?.version || '1.1.0' }}</span>
+              <span class="mono">{{ health?.version || '1.2.0' }}</span>
             </n-descriptions-item>
           </n-descriptions>
         </n-card>

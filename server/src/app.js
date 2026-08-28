@@ -95,7 +95,7 @@ export function createApp({ db, gopeed, tasks }) {
 
   // ---------- 健康 & 设置 ----------
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, gopeed: gopeed.ready, version: '1.1.0' });
+    res.json({ ok: true, gopeed: gopeed.ready, version: '1.2.0' });
   });
 
   function settingsPayload() {
