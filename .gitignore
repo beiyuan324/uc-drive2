@@ -37,3 +37,4 @@ ucAuth.txt
 # 日志与临时
 *.tmp
 npm-debug.log*
+HANDOVER.md
