@@ -1,6 +1,6 @@
 [package]
 name = "uc-drive2"
-version = "1.2.0"
+version = "2.0.0"
 description = "uc-drive2 单用户桌面网盘"
 authors = ["uc-drive2"]
 edition = "2021"
@@ -14,12 +14,28 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
-# get_server_port 异步轮询用 tokio 定时器（tauri 默认不带 time feature）
-tokio = { version = "1", features = ["time"] }
-tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"
+
+# Rust HTTP 后端与 gopeed REST 集成
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "fs", "io-util", "process", "sync", "signal"] }
+tokio-util = { version = "0.7", features = ["io"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+aes-gcm = "0.10"
+base64 = "0.22"
+chrono = "0.4"
+rand = "0.8"
+regex = "1"
+percent-encoding = "2"
+url = "2"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"
 
 [profile.release]
 codegen-units = 1

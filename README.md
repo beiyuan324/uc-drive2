@@ -5,93 +5,76 @@
 <h1 align="center">uc-drive2</h1>
 
 <p align="center">
-  <b>你的电脑就是网盘</b> —— 本地文件管理 · 离线下载 · UC 网盘高速下载的桌面小应用
+  <b>你的电脑就是网盘</b>：本地文件管理、离线下载、UC 网盘高速下载
   <br>
-  单机 · 单用户 · 数据不出本机
+  单机、单用户、数据不出本机
 </p>
-
----
-
-别人把文件放别人的云，你把文件放自己硬盘，但该有的方便一样不少：
-
-- **文件管理** —— 浏览、拖拽上传、预览、搜索，和网盘一样顺手，文件却实实在在躺在你磁盘里
-- **UC 网盘高速下载** —— 粘贴一条分享链接，多线程并发拉满，GB 级文件几句话的功夫下完
-- **离线下载** —— HTTP / 磁力 / torrent 照单全收，真实进度、能暂停能继续
 
 ## 功能
 
-**🗂 文件管理**
-网格 / 列表两种视图，拖拽上传，新建、重命名、移动、删除（进系统回收站，能反悔）。
-图片、视频、音频、文本都能直接在应用里预览；全局搜索一步到位；下载走 HTTP Range，中断了能续。
+- 文件浏览、网格/列表视图、拖拽上传、预览、搜索、新建、重命名、移动和删除
+- HTTP(S)、磁力和 `.torrent` 离线任务，支持暂停、继续、进度、速度和剩余时间
+- UC 分享链接解析、目录浏览和多连接下载；直链过期自动刷新，Cookie 失效明确提示
+- 下载完成后自动登记到网盘文件树，历史记录可查看和清理
+- 存储目录可迁移，UC Cookie 使用 AES-256-GCM 加密保存在本机
+- 关闭窗口进入托盘，下载可在后台继续
 
-**⚡ UC 网盘高速下载**
-把分享链接粘进来（一次可以贴好几条）就能解析出文件列表，选文件或连文件夹一起递归下载。
-UC 直链单连接限速得可怜，所以这里默认开 **300 个并发连接**线性叠加，实测能轻松跑满宽带；
-直链过期了会自动刷新重试，Cookie 失效会毫不含糊地提示你「去设置更新」，而不是丢一句"下载失败"。
+## 架构
 
-**📥 离线下载**
-支持 HTTP(S) 链接、磁力、.torrent 文件。实时进度 / 速度 / 剩余时间，可暂停、可继续。
-下完自动登记进网盘——单个文件直接挂在根目录，多文件的按任务名建个文件夹，整整齐齐。
-
-**🕘 历史记录**
-所有下载都在历史里留档，想重下点一下就行，链接随时可复制，一键清空。
-
-**🖥 低调的后台**
-点关闭只是缩进系统托盘，下载在后台照跑，完成后弹个系统通知。托盘菜单随时能唤回窗口。
-
-**⚙️ 设置**
-网盘存储目录想放哪放哪（换盘搬家自动完成）；下载并发数、同时任务数自己调；
-UC Cookie 用 AES-256 加密存本机；浅色、深色、跟随系统三套主题。
-
-## 安装
-
-Windows x64 应用。拿到安装包双击装上就能用，不需要注册账号，不需要联网配置。
-
-### 从源码构建
-
-```bash
-npm install                 # 前端依赖
-npm --prefix server install # 后端依赖
-npm run tauri:build         # 前端 + 后端 + NSIS 安装包
+```text
+uc-drive2.exe (Tauri 壳 + Rust HTTP 后端)
+ └─ gopeed-web.exe (headless 下载引擎，唯一外部子进程)
 ```
 
-装完包在 `src-tauri/target/release/bundle/nsis/` 下。
+Rust 后端在 Tauri 主进程内运行 axum HTTP 服务，只监听 `127.0.0.1`。默认端口为 `17210`，被占用时在 `17210..17229` 中选择可用端口，并将实际端口写入 `%APPDATA%/uc-drive2/server.port`。前端继续通过 Tauri `get_server_port` 或端口扫描发现服务。
 
-### 开发模式
+SQLite 使用 `rusqlite bundled`，数据库文件为 `%APPDATA%/uc-drive2/data/uc-drive.db`。文件本体保存在 `storage/`，离线任务暂存于 `storage/offline/`，gopeed 数据保存在 `gopeed/`。已有数据库、数据目录和 `.secret` Cookie 密钥可直接继续使用。
+
+## 安装与构建
+
+项目目标为 Windows x64。安装包输出到 `src-tauri/target/release/bundle/nsis/`。
+
+```bash
+npm install
+npm run tauri:build
+```
+
+安装包只携带 Tauri 应用和 `gopeed-web.exe` 下载引擎，不需要额外安装运行时。
+
+## 开发
+
+浏览器开发模式同时启动 Rust 后端和 Vite：
 
 ```bash
 npm run dev
 ```
 
-会同时拉起后端（127.0.0.1:17210）和 Vite（5173），浏览器打开 http://localhost:5173 就能纯网页调试；
-打包运行时代前端会自动读后端真实端口。
+后端监听 `127.0.0.1`，Vite 默认监听 `5173`，浏览器访问 <http://localhost:5173>。也可以单独启动后端：
 
-## 它怎么工作
-
-```
-uc-drive2 (Tauri 壳)
- └─ node.exe → server-dist/server.js    # Express 后端，只监听 127.0.0.1，端口被占自动 +1
-     └─ gopeed-web.exe                  # 下载引擎，headless，随机端口随机 token
+```bash
+npm run dev:backend
 ```
 
-- 文件本体就是磁盘上的普通文件，SQLite 只存元数据 —— 随时能用资源管理器打开看，不搞封闭格式
-- 数据都在 `%APPDATA%/uc-drive2/`：网盘根目录、数据库、加密的 Cookie、访问日志
-- 无遥测、无账号体系、无常驻服务；托盘点「退出」直接结束整棵进程树，四毫秒完事
-
-## 技术栈
-
-Tauri v2（Rust 壳） · Vue 3 + TypeScript + Naive UI + Pinia
-Express 后端（Node 内置 SQLite 驱动，零原生模块，便于打包单文件分发） · esbuild 单文件后端 · gopeed 下载引擎
+如只使用 Tauri 窗口，运行 `npx tauri dev` 即可；Tauri 主进程会自行启动 Rust 后端。
 
 ## 测试
 
 ```bash
-npm run test        # 后端 node --test，40+ 项（含真实 gopeed 端到端）
-npm run test:unit   # 前端 Vitest，27 项
+# Rust 后端：单元、文件 API、任务/gopeed mock API
+cargo test --manifest-path src-tauri/Cargo.toml --all-targets
+
+# Vue 前端
+npm test
+npx vue-tsc --noEmit
 ```
 
-有一条 UC 真实链路测试（解析 → 直链 → 下载 → 登记）需要有效 Cookie：在项目根放 `ucAuth.txt`
-（内容含 `[url]` 和 `[cookie]` 两段，已 gitignore），Cookie 过期或缺文件时会自动跳过。
+根目录的 `ucAuth.txt` 是本地测试数据，不会提交到仓库。文件包含 `[url]` 和 `[cookie]` 两段时，可以显式运行真实 UC 链路测试：
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --test uc_e2e -- --ignored --nocapture
+```
+
+该测试覆盖分享解析、递归找文件、直链预检、gopeed 下载、进度同步和完成后登记。真实测试依赖网络、有效 Cookie 和仓库中的 `bin/gopeed/gopeed-web.exe`。
 
 ## License
 
