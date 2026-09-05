@@ -36,7 +36,11 @@
   --zinc-50: #fafafa;
   --zinc-100: #f4f4f5;
   --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
   --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
   --zinc-800: #27272a;
   --zinc-900: #18181b;
 }
@@ -46,11 +50,15 @@
   --accent: #10b981;
   --accent-hover: #34d399;
   --zinc-50: #18181b;
-  --zinc-100: #27272a;
-  --zinc-200: #3f3f46;
+  --zinc-100: #222226;
+  --zinc-200: #333338;
+  --zinc-300: #4a4a52;
+  --zinc-400: #71717a;
   --zinc-500: #9ca3af;
+  --zinc-600: #d4d4d8;
+  --zinc-700: #e4e4e7;
   --zinc-800: #a1a1aa;
-  --zinc-900: #e4e4e7;
+  --zinc-900: #f4f4f5;
 }
 
 * {
@@ -110,3 +118,37 @@ body {
 .fade-leave-to {
   opacity: 0;
 }
+
+/* 常用工具类 */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.hover-lift {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+}
+
