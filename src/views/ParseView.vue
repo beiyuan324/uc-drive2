@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, useDialog } from 'naive-ui';
 import {
@@ -24,19 +24,43 @@ const settings = useSettingsStore();
 
 const shareText = ref('');
 const parsing = ref(false);
-const parsed = ref<{
+type ParsedShare = {
   shareId: string;
   shareLink: string;
   session: UcSession;
   cookieUsed: boolean;
-}[]>([]);
+};
+const parsed = ref<ParsedShare[]>([]);
 
 /** 当前正在浏览的链接索引 + 目录栈 */
 const activeIdx = ref(-1);
 const crumbStack = ref<{ name: string; pdirFid: string | null }[]>([]);
 const currentFiles = ref<UcFile[]>([]);
 const folderLoading = ref(false);
-const downloading = ref(false);
+
+/** 正在创建下载任务的文件 key（按分享和 fid 跟踪，避免给所有行按钮上 loading） */
+const pendingFids = ref<Set<string>>(new Set());
+/** 批量下载进行中的操作，仅用于「下载所选 / 全部下载」按钮的 loading */
+const batchBusy = ref<'' | 'selected' | 'all'>('');
+
+function pendingKey(shareId: string | undefined, fid: string) {
+  return `${shareId ?? ''}:${fid}`;
+}
+
+function setPendingFids(shareId: string, fids: string[], pending: boolean) {
+  const next = new Set(pendingFids.value);
+  for (const fid of fids) {
+    const key = pendingKey(shareId, fid);
+    if (pending) next.add(key);
+    else next.delete(key);
+  }
+  pendingFids.value = next;
+}
+
+function resetDownloadState() {
+  pendingFids.value = new Set();
+  batchBusy.value = '';
+}
 
 /** 多选勾选集（存放选中的文件 fid） */
 const selectedFids = ref<Set<string>>(new Set());
@@ -86,6 +110,7 @@ async function parseAll() {
   currentFiles.value = [];
   crumbStack.value = [];
   selectedFids.value = new Set();
+  resetDownloadState();
   try {
     for (const link of links) {
       const r = await api.ucParse(link);
@@ -151,74 +176,90 @@ function goCrumb(idx: number) {
   loadFolder(active.value, target.pdirFid);
 }
 
-/** 下载创建失败：Cookie 失效要给出明确引导 */
-function handleDownloadError(e: unknown, name = '') {
+/** 清空解析结果，强制下次重新解析（避免 keep-alive 旧会话继续用过期 Cookie） */
+function clearParsedSessions() {
+  parsed.value = [];
+  activeIdx.value = -1;
+  currentFiles.value = [];
+  crumbStack.value = [];
+  selectedFids.value = new Set();
+  resetDownloadState();
+}
+
+/** 下载创建失败；返回 true 表示需要中止当前批量操作。 */
+function handleDownloadError(e: unknown, name = ''): boolean {
   const err = e as Error & { kind?: string };
   if (err.kind === 'cookie_expired') {
+    clearParsedSessions();
     message.warning(
-      `${name ? `「${name}」` : ''}UC Cookie 已失效，请到设置中更新后重新下载`,
+      `${name ? `「${name}」` : ''}UC Cookie 已失效，请到设置中更新后重新解析再下载`,
       { duration: 8000 },
     );
     setTimeout(() => router.push('/settings'), 500);
-    return;
+    return true;
   }
   message.error(err.message || '下载失败');
+  return false;
 }
 
 async function downloadOne(f: UcFile) {
-  if (!active.value) return;
-  downloading.value = true;
+  const share = active.value;
+  if (!share || pendingFids.value.has(pendingKey(share.shareId, f.fid))) return;
+  setPendingFids(share.shareId, [f.fid], true);
   try {
     await api.ucDownload({
-      shareId: active.value.shareId,
-      stoken: active.value.session.stoken,
+      shareId: share.shareId,
+      stoken: share.session.stoken,
       fid: f.fid,
       shareFidToken: f.share_fid_token,
       filename: f.name,
       size: f.size,
-      ctoken: active.value.session.ctoken,
-      cookies: active.value.session.cookies,
-      shareLink: active.value.shareLink,
+      ctoken: share.session.ctoken,
+      cookies: share.session.cookies,
+      shareLink: share.shareLink,
       connections: settings.downloadConfig.ucConnections,
     });
     message.success(`已创建任务：${f.name}`);
   } catch (e) {
     handleDownloadError(e, f.name);
   } finally {
-    downloading.value = false;
+    setPendingFids(share.shareId, [f.fid], false);
   }
 }
 
 async function downloadSelected() {
-  if (!active.value) return;
+  const share = active.value;
+  if (!share || batchBusy.value) return;
   const targets = currentFiles.value.filter(f => f.file && selectedFids.value.has(f.fid));
   if (!targets.length) return message.warning('请先勾选要下载的文件');
-  downloading.value = true;
+  batchBusy.value = 'selected';
+  setPendingFids(share.shareId, targets.map(f => f.fid), true);
   try {
     let created = 0;
     for (const f of targets) {
       try {
         await api.ucDownload({
-          shareId: active.value.shareId,
-          stoken: active.value.session.stoken,
+          shareId: share.shareId,
+          stoken: share.session.stoken,
           fid: f.fid,
           shareFidToken: f.share_fid_token,
           filename: f.name,
           size: f.size,
-          ctoken: active.value.session.ctoken,
-          cookies: active.value.session.cookies,
-          shareLink: active.value.shareLink,
+          ctoken: share.session.ctoken,
+          cookies: share.session.cookies,
+          shareLink: share.shareLink,
           connections: settings.downloadConfig.ucConnections,
         });
         created++;
       } catch (e) {
-        handleDownloadError(e, f.name);
+        if (handleDownloadError(e, f.name)) return;
       }
     }
     message.success(`已创建 ${created}/${targets.length} 个下载任务`);
-    selectedFids.value = new Set();
+    if (active.value === share) selectedFids.value = new Set();
   } finally {
-    downloading.value = false;
+    setPendingFids(share.shareId, targets.map(f => f.fid), false);
+    batchBusy.value = '';
   }
 }
 
@@ -234,41 +275,46 @@ async function flattenFiles(p: { shareId: string; session: UcSession }, pdirFid:
 }
 
 async function downloadAll() {
-  if (!active.value) return;
-  const ok = await dialog.warning({
-    title: '全部下载确认',
-    content: '将下载当前目录（含所有子文件夹）中的所有文件。确定创建批量任务？',
-    positiveText: '开始下载',
-    negativeText: '取消',
-  });
-  if (!ok) return;
-  downloading.value = true;
+  const share = active.value;
+  if (!share || batchBusy.value) return;
+  const pdirFid = crumbStack.value[crumbStack.value.length - 1]?.pdirFid ?? null;
+  batchBusy.value = 'all';
+  let all: UcFile[] = [];
   try {
-    const all = await flattenFiles(active.value, crumbStack.value[crumbStack.value.length - 1]?.pdirFid ?? null);
+    const ok = await dialog.warning({
+      title: '全部下载确认',
+      content: '将下载当前目录（含所有子文件夹）中的所有文件。确定创建批量任务？',
+      positiveText: '开始下载',
+      negativeText: '取消',
+    });
+    if (!ok) return;
+    all = await flattenFiles(share, pdirFid);
     if (!all.length) return message.info('当前目录没有文件');
+    setPendingFids(share.shareId, all.map(f => f.fid), true);
     let created = 0;
     for (const f of all) {
       try {
         await api.ucDownload({
-          shareId: active.value.shareId,
-          stoken: active.value.session.stoken,
+          shareId: share.shareId,
+          stoken: share.session.stoken,
           fid: f.fid,
           shareFidToken: f.share_fid_token,
           filename: f.name,
           size: f.size,
-          ctoken: active.value.session.ctoken,
-          cookies: active.value.session.cookies,
-          shareLink: active.value.shareLink,
+          ctoken: share.session.ctoken,
+          cookies: share.session.cookies,
+          shareLink: share.shareLink,
           connections: settings.downloadConfig.ucConnections,
         });
         created += 1;
       } catch (e) {
-        handleDownloadError(e, f.name);
+        if (handleDownloadError(e, f.name)) return;
       }
     }
     message.success(`已创建 ${created}/${all.length} 个下载任务`);
   } finally {
-    downloading.value = false;
+    setPendingFids(share.shareId, all.map(f => f.fid), false);
+    batchBusy.value = '';
   }
 }
 
@@ -279,6 +325,7 @@ function clearAll() {
   currentFiles.value = [];
   crumbStack.value = [];
   selectedFids.value = new Set();
+  resetDownloadState();
 }
 </script>
 
@@ -349,13 +396,13 @@ function clearAll() {
             v-if="selectedFids.size > 0"
             size="small"
             type="primary"
-            :loading="downloading"
+            :loading="batchBusy === 'selected'"
             @click="downloadSelected"
           >
             <template #icon><n-icon><download-icon /></n-icon></template>
             下载所选 ({{ selectedFids.size }})
           </n-button>
-          <n-button size="small" secondary :loading="downloading" @click="downloadAll">
+          <n-button size="small" secondary :loading="batchBusy === 'all'" @click="downloadAll">
             <template #icon><n-icon><download-icon /></n-icon></template>
             全部下载
           </n-button>
@@ -407,7 +454,7 @@ function clearAll() {
                 <template v-if="f.file">
                   <n-tooltip trigger="hover">
                     <template #trigger>
-                      <n-button size="tiny" type="primary" secondary :loading="downloading" @click="downloadOne(f)">
+                      <n-button size="tiny" type="primary" secondary :loading="pendingFids.has(pendingKey(active?.shareId, f.fid))" @click="downloadOne(f)">
                         <template #icon><n-icon><download-icon /></n-icon></template>
                         下载
                       </n-button>
