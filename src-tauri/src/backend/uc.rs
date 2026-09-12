@@ -132,6 +132,96 @@ fn set_cookie_parts(headers: &HeaderMap) -> Vec<String> {
         .collect()
 }
 
+/// 解析 `a=1; b=2` 为有序 name→value 列表（保持原顺序，同名后者覆盖前者）。
+fn parse_cookie_pairs(cookies: &str) -> Vec<(String, String)> {
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    for part in cookies.split(';') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let Some((name, value)) = part.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if let Some(existing) = pairs.iter_mut().find(|(n, _)| n == name) {
+            existing.1 = value.to_string();
+        } else {
+            pairs.push((name.to_string(), value.to_string()));
+        }
+    }
+    pairs
+}
+
+/// 读取最终 Cookie 字符串中的指定值；同名项以后出现的值为准。
+fn cookie_value(cookies: &str, name: &str) -> Option<String> {
+    parse_cookie_pairs(cookies)
+        .into_iter()
+        .find_map(|(cookie_name, value)| (cookie_name == name).then_some(value))
+}
+
+fn format_cookie_pairs(pairs: &[(String, String)]) -> String {
+    pairs
+        .iter()
+        .map(|(n, v)| format!("{n}={v}"))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn set_cookie_value(cookies: &str, name: &str, value: &str) -> String {
+    let mut pairs = parse_cookie_pairs(cookies);
+    if let Some(existing) = pairs
+        .iter_mut()
+        .find(|(cookie_name, _)| cookie_name == name)
+    {
+        existing.1 = value.to_string();
+    } else {
+        pairs.push((name.to_string(), value.to_string()));
+    }
+    format_cookie_pairs(&pairs)
+}
+
+/// 将 `preferred` 中的 Cookie 同名值覆盖到 `base`，并保留 `preferred` 独有项。
+/// 用于下载/列目录时强制采用最新保存的凭据，避免前端 keep-alive 旧会话继续用过期 Cookie。
+pub fn merge_cookies(base: &str, preferred: &str) -> String {
+    if preferred.trim().is_empty() {
+        return base.trim().to_string();
+    }
+    if base.trim().is_empty() {
+        return preferred.trim().to_string();
+    }
+    let mut pairs = parse_cookie_pairs(base);
+    for (name, value) in parse_cookie_pairs(preferred) {
+        if let Some(existing) = pairs.iter_mut().find(|(n, _)| *n == name) {
+            existing.1 = value;
+        } else {
+            pairs.push((name, value));
+        }
+    }
+    format_cookie_pairs(&pairs)
+}
+
+/// 合并 Cookie，并保证返回的 `ctoken` 与 Cookie 头中的值完全一致。
+pub fn merge_cookies_with_ctoken(
+    base: &str,
+    preferred: &str,
+    fallback_ctoken: &str,
+) -> (String, String) {
+    let merged = merge_cookies(base, preferred);
+    let ctoken = cookie_value(preferred, "ctoken")
+        .filter(|value| !value.is_empty())
+        .or_else(|| (!fallback_ctoken.is_empty()).then(|| fallback_ctoken.to_string()))
+        .or_else(|| cookie_value(&merged, "ctoken").filter(|value| !value.is_empty()));
+    match ctoken {
+        Some(ctoken) => (set_cookie_value(&merged, "ctoken", &ctoken), ctoken),
+        None => (merged, String::new()),
+    }
+}
+
 fn merge_set_cookies(cookies: &mut String, ctoken: &mut String, set_cookies: &[String]) {
     for cookie in set_cookies {
         let parts = cookie.split(';').next().unwrap_or("");
@@ -542,5 +632,50 @@ mod tests {
         assert_eq!(share.as_deref(), Some("abc123xyz"));
         assert_eq!(dir.as_deref(), Some("9f86d081884c7d659a2feaa0c55ad015"));
         assert_eq!(extract_ids("https://example.com/not-uc").0, None);
+    }
+
+    #[test]
+    fn 合并cookie同名以最新保存值优先() {
+        let base = "SNUID=old; __uid=abc; extra=1";
+        let preferred = "SNUID=new; __uid=xyz; fresh=2";
+        let merged = merge_cookies(base, preferred);
+        assert!(merged.contains("SNUID=new"));
+        assert!(merged.contains("__uid=xyz"));
+        assert!(merged.contains("extra=1"));
+        assert!(merged.contains("fresh=2"));
+        assert!(!merged.contains("SNUID=old"));
+        assert!(!merged.contains("__uid=abc"));
+    }
+
+    #[test]
+    fn 合并cookie空侧处理() {
+        assert_eq!(merge_cookies("", "a=1"), "a=1");
+        assert_eq!(merge_cookies("a=1", ""), "a=1");
+        assert_eq!(merge_cookies("", ""), "");
+    }
+
+    #[test]
+    fn 合并后读取最新cookie值() {
+        assert_eq!(
+            cookie_value("a=1; ctoken=old; ctoken=new", "ctoken").as_deref(),
+            Some("new")
+        );
+        assert_eq!(cookie_value("a=1", "ctoken"), None);
+    }
+
+    #[test]
+    fn 合并cookie时同步ctoken() {
+        let (cookies, ctoken) =
+            merge_cookies_with_ctoken("SNUID=old; ctoken=base", "SNUID=new", "session");
+        assert_eq!(ctoken, "session");
+        assert_eq!(cookie_value(&cookies, "ctoken").as_deref(), Some("session"));
+
+        let (cookies, ctoken) =
+            merge_cookies_with_ctoken("SNUID=old; ctoken=base", "ctoken=preferred", "session");
+        assert_eq!(ctoken, "preferred");
+        assert_eq!(
+            cookie_value(&cookies, "ctoken").as_deref(),
+            Some("preferred")
+        );
     }
 }

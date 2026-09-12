@@ -835,7 +835,13 @@ async fn uc_list_folder(
         .and_then(|s| s.get("cookies"))
         .and_then(Value::as_str)
         .unwrap_or("");
-    let files = super::uc::list_folder(&state.client, share_id, stoken, pdir, ctoken, cookies)
+    // 优先采用最新保存的 Cookie，避免前端旧会话在 Cookie 更新后仍使用过期凭据。
+    let saved = {
+        let db = state.db.lock().unwrap();
+        get_uc_cookie(&db, &state.paths.data_dir)
+    };
+    let (cookies, ctoken) = super::uc::merge_cookies_with_ctoken(cookies, &saved, ctoken);
+    let files = super::uc::list_folder(&state.client, share_id, stoken, pdir, &ctoken, &cookies)
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "files": files })))
@@ -873,19 +879,25 @@ async fn uc_download(
         .and_then(|o| o.get("cookies"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    // 优先采用最新保存的 Cookie：Cookie 过期重新保存后，解析页旧会话不应继续用旧凭据。
+    let saved = {
+        let db = state.db.lock().unwrap();
+        get_uc_cookie(&db, &state.paths.data_dir)
+    };
+    let (cookies, ctoken) = super::uc::merge_cookies_with_ctoken(cookies, &saved, ctoken);
     let url = super::uc::resolve_download(
         &state.client,
         share_id,
         stoken,
         fid,
         share_fid_token,
-        ctoken,
-        cookies,
+        &ctoken,
+        &cookies,
     )
     .await
     .map_err(ApiError::internal)?;
     let probe =
-        super::uc::probe_download_url(&state.client, &url, cookies, Duration::from_secs(8)).await;
+        super::uc::probe_download_url(&state.client, &url, &cookies, Duration::from_secs(8)).await;
     if probe.kind == "cookie_expired" {
         return Err(ApiError::with_kind(
             403,
