@@ -1,6 +1,6 @@
 {
   "name": "uc-drive2",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "uc-drive2 单用户桌面网盘（Tauri + Vue3 + Rust + SQLite + gopeed）",
   "scripts": {
