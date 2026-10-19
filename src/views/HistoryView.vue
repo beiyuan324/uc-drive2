@@ -3,9 +3,14 @@ import { computed, onActivated, ref } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import { NButton, NIcon, NEmpty, NSpin, NTable, NSpace, NTag, NTooltip, NInput } from 'naive-ui';
 import {
-  PhClock as ClockIcon, PhTrash as TrashIcon, PhArrowClockwise as RedownloadIcon,
-  PhCopy as CopyIcon, PhCheck as CheckIcon, PhLink as LinkIcon,
-  PhMagnifyingGlass as SearchIcon, PhCheckCircle as SuccessIcon,
+  PhClock as ClockIcon,
+  PhTrash as TrashIcon,
+  PhArrowClockwise as RedownloadIcon,
+  PhCopy as CopyIcon,
+  PhCheck as CheckIcon,
+  PhLink as LinkIcon,
+  PhMagnifyingGlass as SearchIcon,
+  PhCheckCircle as SuccessIcon,
 } from '@phosphor-icons/vue';
 import { api, formatSize } from '@/api';
 import FileIcon from '@/components/FileIcon.vue';
@@ -19,20 +24,25 @@ const loading = ref(false);
 const searchQuery = ref('');
 const copiedId = ref<number | null>(null);
 
-const statusMeta: Record<string, { label: string; type: 'success' | 'error' | 'warning' | 'info' | 'default' }> = {
+const statusMeta: Record<
+  string,
+  { label: string; type: 'success' | 'error' | 'warning' | 'info' | 'default' }
+> = {
   done: { label: '已完成', type: 'success' },
   error: { label: '失败', type: 'error' },
   cookie_expired: { label: 'Cookie 失效', type: 'warning' },
   replaced: { label: '已替换', type: 'info' },
 };
 
-const doneCount = computed(() => history.value.filter(t => t.status === 'done').length);
-const failCount = computed(() => history.value.filter(t => t.status === 'error' || t.status === 'cookie_expired').length);
+const doneCount = computed(() => history.value.filter((t) => t.status === 'done').length);
+const failCount = computed(
+  () => history.value.filter((t) => t.status === 'error' || t.status === 'cookie_expired').length,
+);
 
 const filteredHistory = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return history.value;
-  return history.value.filter(t => {
+  return history.value.filter((t) => {
     const name = fileName(t).toLowerCase();
     const source = (t.source || '').toLowerCase();
     return name.includes(q) || source.includes(q);
@@ -58,7 +68,7 @@ async function reDownload(t: TaskItem) {
       const uc = (t.metadata?.uc || {}) as Record<string, string>;
       if (!uc.shareLink) return message.error('缺少原始分享链接，无法重新下载');
       const r = await api.ucParse(uc.shareLink);
-      const f = r.files.find(x => x.fid === uc.fid);
+      const f = r.files.find((x) => x.fid === uc.fid);
       if (!f) return message.error('分享中已找不到该文件');
       await api.ucDownload({
         shareId: r.shareId,
@@ -82,13 +92,16 @@ async function reDownload(t: TaskItem) {
 }
 
 async function copyLink(t: TaskItem) {
-  const link = t.source === 'uc'
-    ? (t.metadata?.uc as Record<string, string>)?.shareLink || t.source_url
-    : t.source_url;
+  const link =
+    t.source === 'uc'
+      ? (t.metadata?.uc as Record<string, string>)?.shareLink || t.source_url
+      : t.source_url;
   try {
     await navigator.clipboard.writeText(link);
     copiedId.value = t.id;
-    setTimeout(() => { if (copiedId.value === t.id) copiedId.value = null; }, 1800);
+    setTimeout(() => {
+      if (copiedId.value === t.id) copiedId.value = null;
+    }, 1800);
     message.success('链接已复制到剪贴板');
   } catch {
     message.warning('复制失败，请手动复制');
@@ -121,7 +134,9 @@ function fmtTime(iso: string | null) {
 
 function fileName(t: TaskItem): string {
   const uc = (t.metadata?.uc || {}) as Record<string, string>;
-  return uc.filename || t.source_url?.split('?')[0]?.split('/').filter(Boolean).pop() || `任务 ${t.id}`;
+  return (
+    uc.filename || t.source_url?.split('?')[0]?.split('/').filter(Boolean).pop() || `任务 ${t.id}`
+  );
 }
 </script>
 
@@ -130,12 +145,18 @@ function fileName(t: TaskItem): string {
     <div class="page-head">
       <div>
         <h2 class="page-title">历史记录</h2>
-        <p class="page-desc">下载完成与失败任务的本地归档，支持一键快速重新下载或复制链接</p>
+        <p class="page-desc">每一份文件，都有迹可循。</p>
       </div>
       <div v-if="history.length > 0" class="stats-row">
-        <span class="stat-pill">共 <strong class="tabular-nums">{{ history.length }}</strong> 条</span>
-        <span v-if="doneCount > 0" class="stat-pill success">完成 <strong class="tabular-nums">{{ doneCount }}</strong></span>
-        <span v-if="failCount > 0" class="stat-pill error">异常 <strong class="tabular-nums">{{ failCount }}</strong></span>
+        <span class="stat-pill"
+          >共 <strong class="tabular-nums">{{ history.length }}</strong> 条</span
+        >
+        <span v-if="doneCount > 0" class="stat-pill success"
+          >完成 <strong class="tabular-nums">{{ doneCount }}</strong></span
+        >
+        <span v-if="failCount > 0" class="stat-pill error"
+          >异常 <strong class="tabular-nums">{{ failCount }}</strong></span
+        >
       </div>
     </div>
 
@@ -150,13 +171,7 @@ function fileName(t: TaskItem): string {
         >
           <template #prefix><n-icon :component="SearchIcon" /></template>
         </n-input>
-        <n-button
-          size="small"
-          type="error"
-          secondary
-          :disabled="!history.length"
-          @click="clearAll"
-        >
+        <n-button size="small" type="error" secondary :disabled="!history.length" @click="clearAll">
           <template #icon><n-icon :component="TrashIcon" /></template>
           清空历史
         </n-button>
@@ -164,7 +179,11 @@ function fileName(t: TaskItem): string {
 
       <div v-if="loading" class="loading-box"><n-spin size="small" /></div>
       <n-empty v-else-if="!history.length" description="暂无历史记录" class="empty-box" />
-      <n-empty v-else-if="!filteredHistory.length" description="没有找到匹配的历史记录" class="empty-box" />
+      <n-empty
+        v-else-if="!filteredHistory.length"
+        description="没有找到匹配的历史记录"
+        class="empty-box"
+      />
 
       <n-table v-else size="small" :bordered="false" class="history-table">
         <thead>
@@ -172,8 +191,8 @@ function fileName(t: TaskItem): string {
             <th>文件名</th>
             <th style="width: 100px">来源</th>
             <th style="width: 110px">状态</th>
-            <th style="width: 150px; text-align: right;">完成/更新时间</th>
-            <th style="width: 140px; text-align: right;">操作</th>
+            <th style="width: 150px; text-align: right">完成/更新时间</th>
+            <th style="width: 140px; text-align: right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -185,7 +204,9 @@ function fileName(t: TaskItem): string {
               </div>
             </td>
             <td>
-              <span class="source-tag">{{ t.source === 'uc' ? 'UC 网盘' : t.source.toUpperCase() }}</span>
+              <span class="source-tag">{{
+                t.source === 'uc' ? 'UC 网盘' : t.source.toUpperCase()
+              }}</span>
             </td>
             <td>
               <n-tag size="small" :type="statusMeta[t.status]?.type || 'default'" :bordered="false">
@@ -193,8 +214,10 @@ function fileName(t: TaskItem): string {
               </n-tag>
               <div v-if="t.error" class="err muted" :title="t.error">{{ t.error }}</div>
             </td>
-            <td class="muted tabular-nums" style="text-align: right;">{{ fmtTime(t.finished_at || t.updated_at) }}</td>
-            <td style="text-align: right;">
+            <td class="muted tabular-nums" style="text-align: right">
+              {{ fmtTime(t.finished_at || t.updated_at) }}
+            </td>
+            <td style="text-align: right">
               <n-space size="small" justify="end" align="center">
                 <n-tooltip trigger="hover">
                   <template #trigger>
@@ -207,9 +230,18 @@ function fileName(t: TaskItem): string {
                 </n-tooltip>
                 <n-tooltip trigger="hover">
                   <template #trigger>
-                    <n-button size="tiny" quaternary circle @click="copyLink(t)" aria-label="复制链接">
+                    <n-button
+                      size="tiny"
+                      quaternary
+                      circle
+                      @click="copyLink(t)"
+                      aria-label="复制链接"
+                    >
                       <template #icon>
-                        <n-icon :component="copiedId === t.id ? CheckIcon : CopyIcon" :color="copiedId === t.id ? 'var(--accent)' : undefined" />
+                        <n-icon
+                          :component="copiedId === t.id ? CheckIcon : CopyIcon"
+                          :color="copiedId === t.id ? 'var(--accent)' : undefined"
+                        />
                       </template>
                     </n-button>
                   </template>
@@ -225,28 +257,6 @@ function fileName(t: TaskItem): string {
 </template>
 
 <style scoped>
-.history-view {
-  max-width: 960px;
-}
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.page-desc {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--zinc-500);
-}
 .stats-row {
   display: flex;
   align-items: center;
@@ -279,12 +289,6 @@ function fileName(t: TaskItem): string {
 }
 .stat-pill.error strong {
   color: #ef4444;
-}
-.panel {
-  background: var(--zinc-50);
-  border: 1px solid var(--zinc-200);
-  border-radius: var(--radius-panel);
-  padding: 18px 20px;
 }
 .panel-toolbar {
   display: flex;

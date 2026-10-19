@@ -13,7 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppLayout: typeof import('./components/AppLayout.vue')['default']
     FileIcon: typeof import('./components/FileIcon.vue')['default']
-    NTable: typeof import('naive-ui')['NTable']
+    FileThumbnail: typeof import('./components/FileThumbnail.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }
