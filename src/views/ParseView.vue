@@ -3,13 +3,30 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, useDialog } from 'naive-ui';
 import {
-  NButton, NIcon, NInput, NAlert, NEmpty, NSpin, NTable, NSpace,
-  NBreadcrumb, NBreadcrumbItem, NTooltip, NTag, NCheckbox,
+  NButton,
+  NIcon,
+  NInput,
+  NAlert,
+  NEmpty,
+  NSpin,
+  NTable,
+  NSpace,
+  NBreadcrumb,
+  NBreadcrumbItem,
+  NTooltip,
+  NTag,
+  NCheckbox,
 } from 'naive-ui';
 import {
-  PhLink as LinkIcon, PhPlay as ParseIcon, PhDownloadSimple as DownloadIcon,
-  PhFolder as FolderGlyph, PhFile as FileGlyph, PhArrowClockwise as RefreshIcon,
-  PhInfo as InfoIcon, PhArrowsClockwise as RetryIcon, PhFolderOpen as FolderOpenIcon,
+  PhLink as LinkIcon,
+  PhPlay as ParseIcon,
+  PhDownloadSimple as DownloadIcon,
+  PhFolder as FolderGlyph,
+  PhFile as FileGlyph,
+  PhArrowClockwise as RefreshIcon,
+  PhInfo as InfoIcon,
+  PhArrowsClockwise as RetryIcon,
+  PhFolderOpen as FolderOpenIcon,
   PhGearSix as GearIcon,
 } from '@phosphor-icons/vue';
 import { api, formatSize } from '@/api';
@@ -68,16 +85,16 @@ const selectedFids = ref<Set<string>>(new Set());
 const hasResult = computed(() => parsed.value.length > 0);
 const active = computed(() => parsed.value[activeIdx.value]);
 
-const currentFileItems = computed(() => currentFiles.value.filter(f => f.file));
+const currentFileItems = computed(() => currentFiles.value.filter((f) => f.file));
 
 const isAllSelected = computed(() => {
   const list = currentFileItems.value;
-  return list.length > 0 && list.every(f => selectedFids.value.has(f.fid));
+  return list.length > 0 && list.every((f) => selectedFids.value.has(f.fid));
 });
 
 const isIndeterminate = computed(() => {
   const list = currentFileItems.value;
-  const count = list.filter(f => selectedFids.value.has(f.fid)).length;
+  const count = list.filter((f) => selectedFids.value.has(f.fid)).length;
   return count > 0 && count < list.length;
 });
 
@@ -102,7 +119,10 @@ function toggleSelectAll(checked: boolean) {
 }
 
 async function parseAll() {
-  const links = shareText.value.split('\n').map(s => s.trim()).filter(Boolean);
+  const links = shareText.value
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (!links.length) return message.warning('请输入分享链接');
   parsing.value = true;
   parsed.value = [];
@@ -114,7 +134,12 @@ async function parseAll() {
   try {
     for (const link of links) {
       const r = await api.ucParse(link);
-      parsed.value.push({ shareId: r.shareId, shareLink: r.shareLink, session: r.session, cookieUsed: r.cookieUsed });
+      parsed.value.push({
+        shareId: r.shareId,
+        shareLink: r.shareLink,
+        session: r.session,
+        cookieUsed: r.cookieUsed,
+      });
     }
     message.success(`解析成功：${parsed.value.length} 个分享链接`);
     // 进入第一个链接的根目录
@@ -230,10 +255,14 @@ async function downloadOne(f: UcFile) {
 async function downloadSelected() {
   const share = active.value;
   if (!share || batchBusy.value) return;
-  const targets = currentFiles.value.filter(f => f.file && selectedFids.value.has(f.fid));
+  const targets = currentFiles.value.filter((f) => f.file && selectedFids.value.has(f.fid));
   if (!targets.length) return message.warning('请先勾选要下载的文件');
   batchBusy.value = 'selected';
-  setPendingFids(share.shareId, targets.map(f => f.fid), true);
+  setPendingFids(
+    share.shareId,
+    targets.map((f) => f.fid),
+    true,
+  );
   try {
     let created = 0;
     for (const f of targets) {
@@ -258,18 +287,25 @@ async function downloadSelected() {
     message.success(`已创建 ${created}/${targets.length} 个下载任务`);
     if (active.value === share) selectedFids.value = new Set();
   } finally {
-    setPendingFids(share.shareId, targets.map(f => f.fid), false);
+    setPendingFids(
+      share.shareId,
+      targets.map((f) => f.fid),
+      false,
+    );
     batchBusy.value = '';
   }
 }
 
 /** 递归展开当前目录全部文件（含子文件夹） */
-async function flattenFiles(p: { shareId: string; session: UcSession }, pdirFid: string | null): Promise<UcFile[]> {
+async function flattenFiles(
+  p: { shareId: string; session: UcSession },
+  pdirFid: string | null,
+): Promise<UcFile[]> {
   const r = await api.ucListFolder(p.shareId, pdirFid, p.session);
   const out: UcFile[] = [];
   for (const f of r.files) {
     if (f.file) out.push(f);
-    else out.push(...await flattenFiles(p, f.fid));
+    else out.push(...(await flattenFiles(p, f.fid)));
   }
   return out;
 }
@@ -290,7 +326,11 @@ async function downloadAll() {
     if (!ok) return;
     all = await flattenFiles(share, pdirFid);
     if (!all.length) return message.info('当前目录没有文件');
-    setPendingFids(share.shareId, all.map(f => f.fid), true);
+    setPendingFids(
+      share.shareId,
+      all.map((f) => f.fid),
+      true,
+    );
     let created = 0;
     for (const f of all) {
       try {
@@ -313,7 +353,11 @@ async function downloadAll() {
     }
     message.success(`已创建 ${created}/${all.length} 个下载任务`);
   } finally {
-    setPendingFids(share.shareId, all.map(f => f.fid), false);
+    setPendingFids(
+      share.shareId,
+      all.map((f) => f.fid),
+      false,
+    );
     batchBusy.value = '';
   }
 }
@@ -333,15 +377,15 @@ function clearAll() {
   <div class="parse-view">
     <div class="page-head">
       <div>
-        <h2 class="page-title">UC 网盘解析</h2>
-        <p class="page-desc">输入分享链接快速提取文件目录，支持单文件下载、勾选批量下载或全目录下载</p>
+        <h2 class="page-title">链接解析</h2>
+        <p class="page-desc">从一条分享链接，连接你的文件。</p>
       </div>
     </div>
 
     <div class="panel">
       <div class="panel-title">
         <n-icon :component="LinkIcon" size="18" />
-        <span>分享链接输入</span>
+        <span>UC 网盘分享链接</span>
       </div>
       <n-input
         v-model:value="shareText"
@@ -351,15 +395,24 @@ function clearAll() {
       />
       <n-space class="parse-actions" :size="10">
         <n-button type="primary" :loading="parsing" @click="parseAll">
-          <template #icon><n-icon><parse-icon /></n-icon></template>
+          <template #icon
+            ><n-icon><parse-icon /></n-icon
+          ></template>
           开始解析
         </n-button>
         <n-button secondary @click="clearAll">清空</n-button>
       </n-space>
-      <n-alert v-if="!active?.cookieUsed && parsed.length" type="warning" :show-icon="false" class="cookie-tip">
+      <n-alert
+        v-if="!active?.cookieUsed && parsed.length"
+        type="warning"
+        :show-icon="false"
+        class="cookie-tip"
+      >
         <div class="cookie-tip-content">
           <span>部分私密分享或直链刷新需要有效 Cookie。</span>
-          <n-button text type="warning" @click="router.push('/settings')">前往「设置 → UC 网盘 Cookie」配置 &rarr;</n-button>
+          <n-button text type="warning" @click="router.push('/settings')"
+            >前往「设置 → UC 网盘 Cookie」配置 &rarr;</n-button
+          >
         </div>
       </n-alert>
     </div>
@@ -382,11 +435,7 @@ function clearAll() {
     <div v-if="hasResult" class="panel">
       <div class="results-header">
         <n-breadcrumb>
-          <n-breadcrumb-item
-            v-for="(c, i) in crumbStack"
-            :key="i"
-            @click="goCrumb(i)"
-          >
+          <n-breadcrumb-item v-for="(c, i) in crumbStack" :key="i" @click="goCrumb(i)">
             <a v-if="i < crumbStack.length - 1" class="crumb-link">{{ c.name }}</a>
             <span v-else class="crumb-current">{{ c.name }}</span>
           </n-breadcrumb-item>
@@ -399,11 +448,15 @@ function clearAll() {
             :loading="batchBusy === 'selected'"
             @click="downloadSelected"
           >
-            <template #icon><n-icon><download-icon /></n-icon></template>
+            <template #icon
+              ><n-icon><download-icon /></n-icon
+            ></template>
             下载所选 ({{ selectedFids.size }})
           </n-button>
           <n-button size="small" secondary :loading="batchBusy === 'all'" @click="downloadAll">
-            <template #icon><n-icon><download-icon /></n-icon></template>
+            <template #icon
+              ><n-icon><download-icon /></n-icon
+            ></template>
             全部下载
           </n-button>
         </n-space>
@@ -416,7 +469,7 @@ function clearAll() {
       <n-table v-else size="small" :bordered="false" class="uc-table">
         <thead>
           <tr>
-            <th style="width: 44px; text-align: center;">
+            <th style="width: 44px; text-align: center">
               <n-checkbox
                 :checked="isAllSelected"
                 :indeterminate="isIndeterminate"
@@ -425,8 +478,8 @@ function clearAll() {
               />
             </th>
             <th style="width: 52%">名称</th>
-            <th style="width: 18%; text-align: right;">大小</th>
-            <th style="width: 24%; text-align: right;">操作</th>
+            <th style="width: 18%; text-align: right">大小</th>
+            <th style="width: 24%; text-align: right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -435,7 +488,7 @@ function clearAll() {
             :key="f.fid"
             :class="{ 'row-checked': f.file && selectedFids.has(f.fid) }"
           >
-            <td style="text-align: center;">
+            <td style="text-align: center">
               <n-checkbox
                 v-if="f.file"
                 :checked="selectedFids.has(f.fid)"
@@ -444,18 +497,33 @@ function clearAll() {
             </td>
             <td>
               <div class="file-cell" @click="f.file ? toggleSelect(f.fid) : enterFolder(f)">
-                <file-icon :name="f.name" :is-dir="!f.file" :mime="f.file ? '' : 'folder'" :size="19" />
+                <file-icon
+                  :name="f.name"
+                  :is-dir="!f.file"
+                  :mime="f.file ? '' : 'folder'"
+                  :size="19"
+                />
                 <span class="file-name" :title="f.name">{{ f.name }}</span>
               </div>
             </td>
-            <td class="muted tabular-nums" style="text-align: right;">{{ f.file ? formatSize(f.size) : '—' }}</td>
-            <td style="text-align: right;">
+            <td class="muted tabular-nums" style="text-align: right">
+              {{ f.file ? formatSize(f.size) : '—' }}
+            </td>
+            <td style="text-align: right">
               <n-space size="small" justify="end" align="center">
                 <template v-if="f.file">
                   <n-tooltip trigger="hover">
                     <template #trigger>
-                      <n-button size="tiny" type="primary" secondary :loading="pendingFids.has(pendingKey(active?.shareId, f.fid))" @click="downloadOne(f)">
-                        <template #icon><n-icon><download-icon /></n-icon></template>
+                      <n-button
+                        size="tiny"
+                        type="primary"
+                        secondary
+                        :loading="pendingFids.has(pendingKey(active?.shareId, f.fid))"
+                        @click="downloadOne(f)"
+                      >
+                        <template #icon
+                          ><n-icon><download-icon /></n-icon
+                        ></template>
                         下载
                       </n-button>
                     </template>
@@ -466,7 +534,9 @@ function clearAll() {
                   <n-tooltip trigger="hover">
                     <template #trigger>
                       <n-button size="tiny" secondary @click="enterFolder(f)">
-                        <template #icon><n-icon><folder-open-icon /></n-icon></template>
+                        <template #icon
+                          ><n-icon><folder-open-icon /></n-icon
+                        ></template>
                         进入
                       </n-button>
                     </template>
@@ -491,29 +561,8 @@ function clearAll() {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 960px;
-}
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.page-desc {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--zinc-500);
 }
 .panel {
-  background: var(--zinc-50);
-  border: 1px solid var(--zinc-200);
-  border-radius: var(--radius-panel);
-  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -585,6 +634,7 @@ function clearAll() {
   cursor: pointer;
 }
 .file-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
