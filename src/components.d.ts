@@ -16,5 +16,6 @@ declare module 'vue' {
     FileThumbnail: typeof import('./components/FileThumbnail.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    WindowControls: typeof import('./components/WindowControls.vue')['default']
   }
 }

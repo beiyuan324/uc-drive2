@@ -26,6 +26,7 @@ import { useFilesStore } from '@/stores/files';
 import { useTasksStore } from '@/stores/tasks';
 import type { ThemeMode } from '@/types';
 import { version } from '../../package.json';
+import WindowControls from './WindowControls.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -140,8 +141,8 @@ onUnmounted(() => {
       </div>
     </aside>
     <div class="app-main">
-      <header class="app-header">
-        <div class="header-location">
+      <header class="app-header" data-tauri-drag-region>
+        <div class="header-location" data-tauri-drag-region>
           <n-tooltip
             ><template #trigger
               ><n-button
@@ -156,7 +157,7 @@ onUnmounted(() => {
                     :size="20" /></template></n-button></template
             >切换导航</n-tooltip
           >
-          <span class="header-location-name">{{ pageTitle }}</span>
+          <span class="header-location-name" data-tauri-drag-region>{{ pageTitle }}</span>
         </div>
         <div class="header-right">
           <n-popover
@@ -217,6 +218,7 @@ onUnmounted(() => {
               >切换外观</n-tooltip
             >
           </n-dropdown>
+          <WindowControls />
         </div>
       </header>
       <main class="app-content">
@@ -402,6 +404,7 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--line);
   background: var(--surface-glass);
   backdrop-filter: blur(20px);
+  user-select: none;
 }
 .header-location,
 .header-right {
