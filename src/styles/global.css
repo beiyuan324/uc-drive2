@@ -1,4 +1,4 @@
-/* Geist 自托管西文字体（font-display: swap），中文走系统栈 */
+﻿/* Geist 自托管西文字体（font-display: swap），中文走系统栈 */
 @font-face {
   font-family: 'Geist';
   src: url('@/assets/fonts/Geist-Regular.woff2') format('woff2');
@@ -30,6 +30,12 @@
 
 :root {
   --radius-control: 8px;
+  --radius-card: 10px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(0, 0, 0, 0.06);
+  --grid-item-border: rgba(0, 0, 0, 0.05);
   --radius-panel: 8px;
   --accent: #007aff;
   --accent-hover: #0066d6;
@@ -63,6 +69,11 @@
   --line: #333336;
   --hover: rgba(255, 255, 255, 0.045);
   --selection: #24384f;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --card-bg: rgba(36, 36, 38, 0.65);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --grid-item-border: rgba(255, 255, 255, 0.06);
   --success: #59cf72;
   --zinc-50: #18181b;
   --zinc-100: #222226;

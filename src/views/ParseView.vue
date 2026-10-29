@@ -566,6 +566,32 @@ function clearAll() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.panel:hover {
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--card-border));
+}
+.uc-table {
+  background: transparent !important;
+}
+.uc-table :deep(th) {
+  background: transparent !important;
+  border-bottom: 1px solid var(--line) !important;
+  color: var(--zinc-500) !important;
+  font-weight: 550 !important;
+  padding: 10px 12px !important;
+}
+.uc-table :deep(tr) {
+  transition: background 0.15s ease;
+}
+.uc-table :deep(tr:not(.row-checked):hover td) {
+  background: var(--hover) !important;
 }
 .panel-title {
   display: flex;

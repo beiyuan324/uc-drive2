@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onActivated, ref, watch } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import {
@@ -921,25 +921,28 @@ onActivated(() => files.refresh());
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 12px 10px;
+  gap: 8px;
+  padding: 14px 10px 12px;
   min-width: 0;
-  min-height: 164px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  min-height: 168px;
+  background: var(--surface);
+  border: 1px solid var(--grid-item-border);
+  border-radius: var(--radius-card);
   cursor: pointer;
   user-select: none;
-  transition: all 0.15s ease;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-sm);
 }
 .grid-item:hover {
-  background: var(--hover);
-  transform: none;
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--zinc-300));
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 .grid-item.selected {
   border-color: var(--accent);
   background: var(--selection);
-  box-shadow: none;
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-md);
 }
 .grid-icon {
   display: flex;
@@ -995,10 +998,23 @@ onActivated(() => files.refresh());
   transition: background 0.1s ease;
 }
 .list-table tr:hover td {
-  background: var(--zinc-100);
+  background: var(--hover);
 }
 .list-table tr.row-selected td {
-  background: color-mix(in srgb, var(--accent) 6%, var(--zinc-50));
+  background: var(--selection);
+  color: var(--zinc-900);
+}
+.list-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 10px;
+  transition: background 0.12s ease;
+}
+.list-table th {
+  border-bottom: 1px solid var(--line);
+  padding: 10px;
+  color: var(--zinc-500);
+  font-weight: 550;
+  font-size: 12px;
 }
 .cell-icon {
   text-align: center;

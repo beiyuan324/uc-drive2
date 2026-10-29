@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, watch, h, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NButton, NInput, NIcon, NPopover, NEmpty, NTooltip, NDropdown, NSpin } from 'naive-ui';
@@ -296,36 +296,54 @@ onUnmounted(() => {
   padding-top: 27px;
 }
 .nav-item {
+  position: relative;
   width: 100%;
-  height: 39px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 11px;
   background: transparent;
-  border: 0;
-  border-radius: 6px;
-  padding: 0 13px;
-  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 12px;
+  margin-bottom: 3px;
   color: var(--zinc-700);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
   text-align: left;
-  transition: background 140ms;
+  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .nav-item > .n-icon {
   color: var(--zinc-500);
+  transition: color 150ms;
 }
 .nav-item:hover {
   background: var(--hover);
+  color: var(--zinc-900);
+}
+.nav-item:hover > .n-icon {
+  color: var(--zinc-800);
 }
 .nav-item.active {
-  background: var(--selection);
+  background: var(--card-bg);
   color: var(--accent);
   font-weight: 600;
+  border-color: var(--card-border);
+  box-shadow: var(--shadow-sm);
 }
 .nav-item.active > .n-icon {
   color: var(--accent);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
 }
 .nav-count {
   margin-left: auto;
@@ -420,11 +438,18 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .search-input {
-  width: 236px;
+  width: 240px;
   --n-color: var(--zinc-100) !important;
-  --n-border: 1px solid transparent !important;
-  --n-height: 30px !important;
+  --n-border: 1px solid var(--zinc-200) !important;
+  --n-border-hover: 1px solid var(--accent) !important;
+  --n-border-focus: 1px solid var(--accent) !important;
+  --n-height: 32px !important;
+  --n-border-radius: 8px !important;
   font-size: 12px;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.search-input:focus-within {
+  width: 280px;
 }
 .header-divider {
   height: 18px;

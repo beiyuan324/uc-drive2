@@ -569,19 +569,24 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 .transfer-overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  padding: 4px 0 30px;
-  margin-bottom: 25px;
-  border-bottom: 1px solid var(--line);
+  gap: 16px;
+  margin-bottom: 24px;
 }
 .transfer-overview > div {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  padding: 16px 20px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.transfer-overview > div + div {
-  border-left: 1px solid var(--line);
-  padding-left: 30px;
+.transfer-overview > div:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--zinc-200));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 .overview-label {
   font-size: 11px;
@@ -656,21 +661,24 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 .task-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 10px;
 }
 .task-item {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  padding: 22px 12px;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  transition: all 0.15s ease;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .task-item:hover {
-  background: var(--hover);
-  transform: none;
+  background: var(--card-bg);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--zinc-300));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 .task-icon {
   flex-shrink: 0;

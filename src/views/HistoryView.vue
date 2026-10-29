@@ -290,12 +290,35 @@ function fileName(t: TaskItem): string {
 .stat-pill.error strong {
   color: #ef4444;
 }
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-sm);
+}
 .panel-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+.history-table {
+  background: transparent !important;
+}
+.history-table :deep(th) {
+  background: transparent !important;
+  border-bottom: 1px solid var(--line) !important;
+  color: var(--zinc-500) !important;
+  font-weight: 550 !important;
+  padding: 10px 12px !important;
+}
+.history-table :deep(tr) {
+  transition: background 0.15s ease;
+}
+.history-table :deep(tr:hover td) {
+  background: var(--hover) !important;
 }
 .history-search {
   max-width: 320px;

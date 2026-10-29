@@ -509,20 +509,25 @@ onActivated(refreshAll);
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 16px;
 }
 .card {
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  padding-bottom: 16px;
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--radius-card) !important;
+  background: var(--card-bg) !important;
+  box-shadow: var(--shadow-sm);
+  padding: 4px 8px 12px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--card-border)) !important;
 }
 .card :deep(.n-card-header) {
-  padding: 24px 0 20px;
+  padding: 16px 12px 14px;
 }
 .card :deep(.n-card-content) {
-  padding: 0 0 12px;
+  padding: 0 12px 12px;
 }
 .appearance-options {
   display: inline-flex;
