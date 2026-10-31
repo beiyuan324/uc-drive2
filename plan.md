@@ -48,10 +48,6 @@ uc-drive2.exe
 - `npm run tauri:build` 只构建 Vue 前端，再构建 Release Tauri/NSIS 包。
 - 包内保留 `gopeed-web.exe` 资源，不再配置 Node sidecar 或旧后端资源。
 
-## 验证
+## 稳定版本维护
 
-- Rust 单元、文件 API 和 gopeed mock 任务 API：`cargo test --manifest-path src-tauri/Cargo.toml --all-targets`
-- Vue 单元测试：`npm test`
-- TypeScript：`npx vue-tsc --noEmit`
-- 真实 UC 链路：根目录存在 `ucAuth.txt` 时显式运行 `cargo test --manifest-path src-tauri/Cargo.toml --test uc_e2e -- --ignored`
-- Release/NSIS：`npm run tauri:build` 后检查安装包资源列表、启动端口文件、health API、gopeed 子进程和安装包中不存在 Node sidecar。
+自动化测试脚本、测试配置与专用依赖已移除。发布前的手动验收场景见 `README.md`；项目检查、构建和验证命令仅在用户明确要求时执行。

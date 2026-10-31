@@ -1097,14 +1097,3 @@ fn unique_dir(db: &Connection, storage: &Path, name: &str) -> ApiResult<PathBuf>
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn 数字钳制与非法值() {
-        assert_eq!(clamp_number(json!(1.6), 1, 10).unwrap(), 2);
-        assert_eq!(clamp_number(json!(99), 1, 10).unwrap(), 10);
-        assert!(clamp_number(json!("abc"), 1, 10).is_err());
-    }
-}

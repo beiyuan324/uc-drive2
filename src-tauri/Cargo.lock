@@ -4600,7 +4600,6 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
- "http-body-util",
  "percent-encoding",
  "rand",
  "regex",
@@ -4612,10 +4611,8 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-updater",
- "tempfile",
  "tokio",
  "tokio-util",
- "tower",
  "url",
 ]
 

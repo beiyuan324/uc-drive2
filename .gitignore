@@ -14,7 +14,11 @@ src-tauri/target/
 .DS_Store
 Thumbs.db
 
-# 本地数据（测试残留）
+# 测试缓存与覆盖率产物
+coverage/
+.vitest/
+
+# 本地日志
 *.log
 
 # 用户测试数据与临时验证

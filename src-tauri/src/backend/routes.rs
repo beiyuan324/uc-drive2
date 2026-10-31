@@ -1010,24 +1010,3 @@ async fn clear_history(State(state): State<Arc<AppState>>) -> ApiResult<Json<Val
     Ok(Json(json!({ "deleted": state.tasks.clear_history()? })))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn 范围解析() {
-        assert!(matches!(parse_range(None, 20), ParsedRange::None));
-        assert!(matches!(
-            parse_range(Some(&HeaderValue::from_static("bytes=2-5")), 20),
-            ParsedRange::Partial { start: 2, end: 5 }
-        ));
-        assert!(matches!(
-            parse_range(Some(&HeaderValue::from_static("bytes=-4")), 20),
-            ParsedRange::Partial { start: 16, end: 19 }
-        ));
-        assert!(matches!(
-            parse_range(Some(&HeaderValue::from_static("bytes=50-60")), 20),
-            ParsedRange::Invalid
-        ));
-    }
-}

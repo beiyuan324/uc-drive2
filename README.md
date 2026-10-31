@@ -60,25 +60,6 @@ npm run dev:backend
 
 如只使用 Tauri 窗口，运行 `npx tauri dev` 即可；Tauri 主进程会自行启动 Rust 后端。
 
-## 测试
-
-```bash
-# Rust 后端：单元、文件 API、任务/gopeed mock API
-cargo test --manifest-path src-tauri/Cargo.toml --all-targets
-
-# Vue 前端
-npm test
-npx vue-tsc --noEmit
-```
-
-根目录的 `ucAuth.txt` 是本地测试数据，不会提交到仓库。文件包含 `[url]` 和 `[cookie]` 两段时，可以显式运行真实 UC 链路测试：
-
-```bash
-cargo test --manifest-path src-tauri/Cargo.toml --test uc_e2e -- --ignored --nocapture
-```
-
-该测试覆盖分享解析、递归找文件、直链预检、gopeed 下载、进度同步和完成后登记。真实测试依赖网络、有效 Cookie 和仓库中的 `bin/gopeed/gopeed-web.exe`。
-
 ## 应用内更新
 
 从 **2.3.0** 开始支持应用内更新。旧版本首次需手动安装 2.3.0 或之后的版本。

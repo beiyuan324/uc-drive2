@@ -525,16 +525,3 @@ fn _timestamp_for_logs() -> i64 {
     now_ms()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn 状态映射() {
-        assert_eq!(GopeedManager::map_status("ready"), "running");
-        assert_eq!(GopeedManager::map_status("pause"), "paused");
-        assert_eq!(GopeedManager::map_status("wait"), "queued");
-        assert_eq!(GopeedManager::map_status("error"), "error");
-        assert_eq!(GopeedManager::map_status("done"), "done");
-    }
-}

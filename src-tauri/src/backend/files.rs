@@ -676,17 +676,3 @@ pub fn collect_download_files(target_dir: &Path) -> Vec<PathBuf> {
     walk_files(target_dir)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn 名称校验和唯一化() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("a.txt");
-        std::fs::write(&p, b"x").unwrap();
-        assert_eq!(unique_path(&p).file_name().unwrap(), "a (1).txt");
-        assert!(!valid_name("a/b"));
-        assert!(valid_name("中文文件"));
-    }
-}

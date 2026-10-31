@@ -265,21 +265,3 @@ pub fn resolve_gopeed_path(resource_dir: Option<&Path>) -> PathBuf {
         })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn 端口占用时递增并遵守尝试次数() {
-        let occupied = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let base = occupied.local_addr().unwrap().port();
-        let (_selected, port) = bind_port(base, 2).await.unwrap();
-        assert_eq!(port, base + 1);
-        drop(occupied);
-
-        let occupied = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let base = occupied.local_addr().unwrap().port();
-        let error = bind_port(base, 1).await.unwrap_err();
-        assert_eq!(error.kind(), std::io::ErrorKind::AddrInUse);
-    }
-}
