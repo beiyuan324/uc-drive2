@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的正式版本标签，例如 v2.3.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,8 +21,12 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: 核对正式标签、版本和签名配置
         id: preflight
@@ -27,7 +37,7 @@ jobs:
         with:
           script: |
             const fs = require('node:fs');
-            const tag = context.ref.replace('refs/tags/', '');
+            const tag = process.env.RELEASE_TAG;
             if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) {
               throw new Error('仅允许正式版本标签 vX.Y.Z');
             }
@@ -98,8 +108,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'uc-drive2 ${{ github.ref_name }}'
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: 'uc-drive2 ${{ env.RELEASE_TAG }}'
           releaseBody: ${{ steps.preflight.outputs.releaseBody }}
           releaseDraft: true
           prerelease: false
@@ -119,7 +129,8 @@ jobs:
             if (!Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error('缺少草稿 Release ID');
             const { data: release } = await github.rest.repos.getRelease({ ...context.repo, release_id: releaseId });
             if (!release.draft) throw new Error('目标 Release 必须是草稿');
-            const version = context.ref.replace('refs/tags/v', '');
+            if (release.tag_name !== process.env.RELEASE_TAG) throw new Error('草稿版本与目标标签不一致');
+            const version = process.env.RELEASE_TAG.slice(1);
             const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
               ...context.repo, release_id: releaseId, per_page: 100,
             });
