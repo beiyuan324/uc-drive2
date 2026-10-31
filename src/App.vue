@@ -4,6 +4,7 @@ import { NConfigProvider, NMessageProvider, NDialogProvider, NNotificationProvid
 import { darkTheme, lightOverrides, darkOverrides, zhCN, dateZhCN } from '@/styles/theme';
 import { useSettingsStore } from '@/stores/settings';
 import AppLayout from '@/components/AppLayout.vue';
+import AppUpdateNotice from '@/components/AppUpdateNotice.vue';
 
 const settings = useSettingsStore();
 
@@ -30,6 +31,7 @@ onUnmounted(() => {
       <n-dialog-provider>
         <n-notification-provider>
           <app-layout />
+          <app-update-notice />
         </n-notification-provider>
       </n-dialog-provider>
     </n-message-provider>

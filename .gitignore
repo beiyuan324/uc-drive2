@@ -29,6 +29,11 @@ ucAuth.txt
 .throttle-*
 .task-detail.json
 
+# 自动更新签名私钥与密码（公钥只放入 Tauri 配置）
+*.key
+*.key.pub
+*.password
+
 # 编辑器与本地
 .vscode/
 .idea/

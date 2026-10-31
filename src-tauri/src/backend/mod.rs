@@ -21,6 +21,7 @@ pub mod models;
 pub mod routes;
 pub mod tasks;
 pub mod uc;
+pub mod update_gate;
 pub mod util;
 pub mod winutil;
 
@@ -43,6 +44,7 @@ pub struct AppState {
     pub tasks: Arc<TaskService>,
     pub client: reqwest::Client,
     pub access_log: AccessLog,
+    pub update_gate: update_gate::UpdateGate,
 }
 
 pub struct StartOptions {
@@ -130,6 +132,7 @@ pub fn build_state(options: &StartOptions) -> ApiResult<Arc<AppState>> {
         .no_proxy()
         .build()
         .expect("reqwest client");
+    let update_gate = update_gate::UpdateGate::default();
     let tasks = TaskService::new(
         db.clone(),
         storage.clone(),
@@ -137,6 +140,7 @@ pub fn build_state(options: &StartOptions) -> ApiResult<Arc<AppState>> {
         gopeed.clone(),
         client.clone(),
         options.poll_interval,
+        update_gate.clone(),
     );
     let access_log = AccessLog::new(paths.data_dir.join("access.log"));
     Ok(Arc::new(AppState {
@@ -148,6 +152,7 @@ pub fn build_state(options: &StartOptions) -> ApiResult<Arc<AppState>> {
         tasks,
         client,
         access_log,
+        update_gate,
     }))
 }
 

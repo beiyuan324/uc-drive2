@@ -180,15 +180,15 @@ impl GopeedManager {
 
     /// 启动 gopeed 并等待 REST 健康检查。
     pub async fn start(self: &Arc<Self>) -> Result<(), String> {
-        if self.running() {
-            return Ok(());
-        }
         {
             let mut inner = self.inner.lock().unwrap();
             inner.stopping = false;
+            if inner.pid.is_some() {
+                return Ok(());
+            }
+            inner.restarts = 0;
         }
         let port = free_port().map_err(|e| e.to_string())?;
-        self.set_endpoint(port);
         // 缺少可执行文件时记录并触发重试；上层通常会在启动前检查 exists。
         let _ = self.spawn_process(port);
         self.wait_ready(Duration::from_secs(30)).await?;
@@ -196,19 +196,24 @@ impl GopeedManager {
         Ok(())
     }
 
-    fn set_endpoint(&self, port: u16) {
+    fn spawn_process(self: &Arc<Self>, port: u16) -> Result<(), String> {
+        // 与安装停止共用互斥区，禁止已排队的自动重启跨过停止检查。
         let mut inner = self.inner.lock().unwrap();
+        if inner.stopping {
+            return Err("gopeed 正在停止".to_string());
+        }
+        if inner.pid.is_some() {
+            return Ok(());
+        }
         inner.port = Some(port);
         inner.base = Some(format!("http://{HOST}:{port}"));
-    }
-
-    fn spawn_process(self: &Arc<Self>, port: u16) -> Result<(), String> {
         let child = match self
             .spawner
             .spawn(HOST, port, &self.token, &self.storage_dir)
         {
             Ok(child) => child,
             Err(err) => {
+                drop(inner);
                 eprintln!("[gopeed] 启动失败: {err}");
                 self.mark_exited(None);
                 self.schedule_restart();
@@ -216,10 +221,8 @@ impl GopeedManager {
             }
         };
         let pid = child.id();
-        {
-            let mut inner = self.inner.lock().unwrap();
-            inner.pid = pid;
-        }
+        inner.pid = pid;
+        drop(inner);
         if let Some(sink) = &self.pid_sink {
             *sink.lock().unwrap() = pid;
         }
@@ -316,7 +319,6 @@ impl GopeedManager {
                 return;
             }
             let Ok(port) = free_port() else { return };
-            manager.set_endpoint(port);
             if manager.spawn_process(port).is_ok() {
                 if manager.wait_ready(Duration::from_secs(30)).await.is_ok() {
                     let _ = manager.events.send(GopeedEvent::Started);
@@ -330,7 +332,6 @@ impl GopeedManager {
     /// 重启：换新端口、重新拉起、等待健康。
     pub async fn restart(self: &Arc<Self>) -> Result<(), String> {
         let port = free_port().map_err(|e| e.to_string())?;
-        self.set_endpoint(port);
         self.spawn_process(port)?;
         self.wait_ready(Duration::from_secs(30)).await?;
         let _ = self.events.send(GopeedEvent::Started);
@@ -369,6 +370,35 @@ impl GopeedManager {
         inner.base = None;
         if let Some(sink) = &self.pid_sink {
             *sink.lock().unwrap() = None;
+        }
+    }
+
+    /// 安装更新必须等到子进程 wait 确认退出，不能只清空本地 pid。
+    pub async fn stop_for_update(&self) -> Result<(), String> {
+        let pid = {
+            let mut inner = self.inner.lock().unwrap();
+            inner.stopping = true;
+            inner.pid
+        };
+        if let Some(pid) = pid {
+            terminate_pid(pid);
+        }
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        while self.running() {
+            if tokio::time::Instant::now() >= deadline {
+                return Err("下载引擎尚未退出，请稍后重试安装".to_string());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Ok(())
+    }
+
+    /// updater 在启动安装器前直接退出主进程；额外保证停止标记不会恢复。
+    pub fn before_update_exit(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.stopping = true;
+        if let Some(pid) = inner.pid {
+            terminate_pid(pid);
         }
     }
 

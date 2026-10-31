@@ -1,4 +1,5 @@
 pub mod backend;
+mod updater;
 
 use std::fs;
 use std::path::PathBuf;
@@ -152,9 +153,11 @@ fn start_backend(app: &tauri::AppHandle, pid_sink: Arc<Mutex<Option<u32>>>) {
     let mut options = backend::StartOptions::new(data_dir, storage_dir, gopeed_exe);
     options.pid_sink = Some(pid_sink);
 
+    let app = app.clone();
     tauri::async_runtime::spawn(async move {
         match backend::start(options).await {
             Ok(handle) => {
+                app.manage(handle.state.clone());
                 if let Err(err) = handle.wait().await {
                     eprintln!("[tauri] Rust 后端已停止: {err}");
                 }
@@ -168,6 +171,8 @@ fn start_backend(app: &tauri::AppHandle, pid_sink: Arc<Mutex<Option<u32>>>) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::AppUpdater::default())
         .setup(|app| {
             let pid_sink = Arc::new(Mutex::new(None));
             app.manage(BackendChild {
@@ -179,7 +184,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_server_port, reveal_in_folder])
+        .invoke_handler(tauri::generate_handler![
+            get_server_port,
+            reveal_in_folder,
+            updater::check_app_update,
+            updater::download_app_update,
+            updater::install_app_update,
+        ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {

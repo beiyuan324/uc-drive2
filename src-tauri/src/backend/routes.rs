@@ -95,8 +95,34 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             state.clone(),
             access_log_middleware,
         ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            update_gate_middleware,
+        ))
         .layer(middleware::from_fn(cors_middleware))
         .with_state(state)
+}
+
+async fn update_gate_middleware(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    // 在读取请求体前持有许可，覆盖整个上传、任务创建和数据迁移过程。
+    let _guard = match state.update_gate.enter() {
+        Ok(guard) => guard,
+        Err(error) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "error": error })),
+            )
+                .into_response()
+        }
+    };
+    next.run(req).await
 }
 
 async fn cors_middleware(req: Request, next: Next) -> Response {

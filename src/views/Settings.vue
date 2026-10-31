@@ -38,6 +38,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { api, getBase } from '@/api';
 import type { ThemeMode } from '@/types';
 import { version } from '../../package.json';
+import AppUpdateSettings from '@/components/AppUpdateSettings.vue';
 
 const message = useMessage();
 const settings = useSettingsStore();
@@ -472,6 +473,16 @@ onActivated(refreshAll);
             >
             <n-tag v-else type="warning" size="small" :bordered="false">未配置 Cookie</n-tag>
           </div>
+        </n-card>
+
+        <n-card class="card" :bordered="true">
+          <template #header>
+            <div class="card-title-row">
+              <n-icon :component="RefreshIcon" size="18" color="var(--accent)" />
+              <span>软件更新</span>
+            </div>
+          </template>
+          <app-update-settings />
         </n-card>
 
         <!-- 关于与技术栈 -->

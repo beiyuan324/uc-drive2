@@ -135,6 +135,7 @@ pub struct TaskService {
     pub client: reqwest::Client,
     speed_cache: Mutex<HashMap<i64, SpeedPoint>>,
     poll_interval: Duration,
+    update_gate: super::update_gate::UpdateGate,
 }
 
 impl std::fmt::Debug for TaskService {
@@ -154,6 +155,7 @@ impl TaskService {
         gopeed: Arc<GopeedManager>,
         client: reqwest::Client,
         poll_interval: Duration,
+        update_gate: super::update_gate::UpdateGate,
     ) -> Arc<Self> {
         Arc::new(TaskService {
             db,
@@ -163,6 +165,7 @@ impl TaskService {
             client,
             speed_cache: Mutex::new(HashMap::new()),
             poll_interval,
+            update_gate,
         })
     }
 
@@ -173,7 +176,11 @@ impl TaskService {
         tokio::spawn(async move {
             loop {
                 match events.recv().await {
-                    Ok(GopeedEvent::Started) => event_service.on_started().await,
+                    Ok(GopeedEvent::Started) => {
+                        if let Ok(_guard) = event_service.update_gate.enter() {
+                            event_service.on_started().await;
+                        }
+                    }
                     Ok(GopeedEvent::Exited { .. }) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -188,6 +195,9 @@ impl TaskService {
             interval.tick().await;
             loop {
                 interval.tick().await;
+                let Ok(_guard) = poll_service.update_gate.enter() else {
+                    continue;
+                };
                 if !poll_service.has_sync_work() || !poll_service.gopeed.ready() {
                     continue;
                 }

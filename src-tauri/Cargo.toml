@@ -1,6 +1,6 @@
 [package]
 name = "uc-drive2"
-version = "2.2.2"
+version = "2.3.0"
 description = "uc-drive2 单用户桌面网盘"
 authors = ["uc-drive2"]
 edition = "2021"
@@ -31,6 +31,7 @@ rand = "0.8"
 regex = "1"
 percent-encoding = "2"
 url = "2"
+tauri-plugin-updater = "~2.12.0"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
