@@ -42,7 +42,7 @@ npm run tauri:build
 
 安装包只携带 Tauri 应用和 `gopeed-web.exe` 下载引擎，不需要额外安装运行时。
 
-首次构建需将 `build-deps/gopeed.json` 指定的固定引擎下载到 `bin/gopeed/gopeed-web.exe`，并核对 SHA-256。正式安装包由自动发布工作流完成签名与依赖准备。
+首次构建需将 `build-deps/gopeed.json` 指定的固定引擎下载到 `bin/gopeed/gopeed-web.exe`，并核对 SHA-256。自动发布工作流会下载并校验引擎，完成签名打包与发布。
 
 ## 开发
 
