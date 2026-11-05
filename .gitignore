@@ -48,3 +48,5 @@ ucAuth.txt
 npm-debug.log*
 .debug-data/
 HANDOVER.md
+AGENT.md
+AGENTS.md
