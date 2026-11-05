@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    uc_drive2_lib::run()
+    folder_drive_lib::run()
 }

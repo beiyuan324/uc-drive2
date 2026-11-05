@@ -1,5 +1,5 @@
 //! 设置项持久化 + UC Cookie 的 AES-256-GCM 加密存储。
-//! 密钥：%APPDATA%/uc-drive2/.secret（首次随机 32 字节生成，随用户数据走，卸载即失）。
+//! 密钥：%APPDATA%/folder-drive/.secret（首次随机 32 字节生成，随用户数据走，卸载即失）。
 //! 密文格式：`v1:{iv_b64}:{tag_b64}:{data_b64}`（与既有格式完全兼容，可互相解密）。
 
 use rusqlite::Connection;

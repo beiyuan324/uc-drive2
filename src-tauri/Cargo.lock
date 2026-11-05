@@ -978,6 +978,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "folder-drive"
+version = "2.3.2"
+dependencies = [
+ "aes-gcm",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "percent-encoding",
+ "rand",
+ "regex",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-updater",
+ "tokio",
+ "tokio-util",
+ "url",
+]
+
+[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4591,30 +4615,6 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
-
-[[package]]
-name = "uc-drive2"
-version = "2.3.1"
-dependencies = [
- "aes-gcm",
- "axum",
- "base64 0.22.1",
- "chrono",
- "percent-encoding",
- "rand",
- "regex",
- "reqwest 0.12.28",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-updater",
- "tokio",
- "tokio-util",
- "url",
-]
 
 [[package]]
 name = "unic-char-property"

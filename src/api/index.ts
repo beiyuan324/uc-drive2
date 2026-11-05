@@ -3,12 +3,12 @@ import type { DownloadConfig, DriveCredential, DriveFile, DriveParseResult, Driv
 
 /**
  * 后端 API 客户端。
- * base URL 来源优先级：Tauri invoke(get_server_port) → window.__UCDRIVE2_BASE__（开发注入） → 默认 17210。
+ * base URL 来源优先级：Tauri invoke(get_server_port) → window.__FOLDER_DRIVE_BASE__（开发注入） → 默认 17210。
  */
 
 declare global {
   interface Window {
-    __UCDRIVE2_BASE__?: string;
+    __FOLDER_DRIVE_BASE__?: string;
   }
 }
 
@@ -32,7 +32,7 @@ function isNetworkError(e: unknown): boolean {
 }
 
 async function detectBase(): Promise<string> {
-  if (window.__UCDRIVE2_BASE__) return window.__UCDRIVE2_BASE__;
+  if (window.__FOLDER_DRIVE_BASE__) return window.__FOLDER_DRIVE_BASE__;
   // Tauri 环境：Rust 侧已轮询等待 port 文件，拿到后仍需确认 HTTP 真的就绪
   try {
     const port = await invoke<number>('get_server_port');

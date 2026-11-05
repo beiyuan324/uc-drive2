@@ -96,7 +96,7 @@ onUnmounted(() => {
       <button class="brand" @click="navigate('/files')">
         <img class="brand-mark" src="@/assets/app-icon.png" alt="" />
         <span class="brand-info"
-          ><strong>uc-drive<span class="brand-two">2</span></strong
+          ><strong><span class="brand-name">folder</span>-drive</strong
           ><span>你的个人文件空间</span></span
         >
       </button>
@@ -229,7 +229,7 @@ onUnmounted(() => {
       </main>
       <footer class="app-statusbar">
         <span><n-icon :component="PhCloud" :size="14" />个人空间</span
-        ><span>uc-drive2 <span class="status-version">{{ version }}</span></span>
+        ><span>folder-drive <span class="status-version">{{ version }}</span></span>
       </footer>
     </div>
   </div>
@@ -278,9 +278,8 @@ onUnmounted(() => {
   font-weight: 650;
   line-height: 1.2;
 }
-.brand-two {
+.brand-name {
   color: var(--accent);
-  margin-left: 2px;
 }
 .brand-info > span {
   color: var(--zinc-500);

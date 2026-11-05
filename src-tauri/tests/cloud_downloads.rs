@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use reqwest::{Client, Method, StatusCode};
 use serde_json::{json, Value};
-use uc_drive2_lib::backend::{self, cloud, crypto, routes, AppState, StartOptions};
+use folder_drive_lib::backend::{self, cloud, crypto, routes, AppState, StartOptions};
 
 struct DenyExternalDns;
 impl reqwest::dns::Resolve for DenyExternalDns {
@@ -17,11 +17,11 @@ impl reqwest::dns::Resolve for DenyExternalDns {
 }
 
 fn official_client() -> Client {
-    let cert = std::fs::read(std::env::var("UCDRIVE2_TEST_CA").expect("请运行 npm run test:cloud"))
+    let cert = std::fs::read(std::env::var("FOLDER_DRIVE_TEST_CA").expect("请运行 npm run test:cloud"))
         .unwrap();
     let addr: SocketAddr = format!(
         "127.0.0.1:{}",
-        std::env::var("UCDRIVE2_TEST_HTTPS_PORT").unwrap()
+        std::env::var("FOLDER_DRIVE_TEST_HTTPS_PORT").unwrap()
     )
     .parse()
     .unwrap();
@@ -323,7 +323,7 @@ impl Drop for TestApp {
 }
 impl TestApp {
     async fn new(engine: bool) -> Self {
-        let data = PathBuf::from(std::env::var("UCDRIVE2_TEST_ROOT").unwrap())
+        let data = PathBuf::from(std::env::var("FOLDER_DRIVE_TEST_ROOT").unwrap())
             .join(format!("app-{}", rand::random::<u64>()));
         let exe = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bin/gopeed/gopeed-web.exe");
         let options = StartOptions::new(data, None, exe);

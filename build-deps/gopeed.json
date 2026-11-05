@@ -1,5 +1,5 @@
 {
-  "url": "https://github.com/beiyuan324/uc-drive2/releases/download/build-deps-v1/gopeed-web.exe",
+  "url": "https://github.com/beiyuan324/folder-drive/releases/download/build-deps-v1/gopeed-web.exe",
   "sha256": "475542ebd2ac9b2ea0fac2d03a5e0e870c676d8c2c441ec32c151682e522c3bb",
   "destination": "bin/gopeed/gopeed-web.exe",
   "source": "保留 v2.2.2 使用的本地 gopeed 引擎；固定二进制附件，不依赖上游浮动版本。"

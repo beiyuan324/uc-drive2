@@ -1,12 +1,12 @@
 [package]
-name = "uc-drive2"
-version = "2.3.1"
-description = "uc-drive2 单用户桌面网盘"
-authors = ["uc-drive2"]
+name = "folder-drive"
+version = "2.3.2"
+description = "folder-drive 个人文件管理与多网盘下载工具"
+authors = ["beiyuan324"]
 edition = "2021"
 
 [lib]
-name = "uc_drive2_lib"
+name = "folder_drive_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

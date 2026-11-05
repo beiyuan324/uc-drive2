@@ -1,14 +1,16 @@
 <p align="center">
-  <img src="app-icon.png" width="96" alt="uc-drive2">
+  <img src="app-icon.png" width="96" alt="folder-drive">
 </p>
 
-<h1 align="center">uc-drive2</h1>
+<h1 align="center"><strong>folder</strong>-drive</h1>
 
 <p align="center">
   <b>你的电脑就是网盘</b>：本地文件管理、离线下载、多网盘官方直链下载
   <br>
   单机、单用户、数据不出本机
 </p>
+
+folder-drive 是 Windows 上的个人文件管理与多网盘下载工具，将本地文件、离线任务和 UC、夸克、百度、迅雷分享下载集中到一个文件空间。
 
 ## 功能
 
@@ -24,13 +26,13 @@
 ## 架构
 
 ```text
-uc-drive2.exe (Tauri 壳 + Rust HTTP 后端)
+folder-drive.exe (Tauri 壳 + Rust HTTP 后端)
  └─ gopeed-web.exe (headless 下载引擎，唯一外部子进程)
 ```
 
-Rust 后端在 Tauri 主进程内运行 axum HTTP 服务，只监听 `127.0.0.1`。默认端口为 `17210`，被占用时在 `17210..17229` 中选择可用端口，并将实际端口写入 `%APPDATA%/uc-drive2/server.port`。前端继续通过 Tauri `get_server_port` 或端口扫描发现服务。
+Rust 后端在 Tauri 主进程内运行 axum HTTP 服务，只监听 `127.0.0.1`。默认端口为 `17210`，被占用时在 `17210..17229` 中选择可用端口，并将实际端口写入 `%APPDATA%/folder-drive/server.port`。前端继续通过 Tauri `get_server_port` 或端口扫描发现服务。
 
-SQLite 使用 `rusqlite bundled`，数据库文件为 `%APPDATA%/uc-drive2/data/uc-drive.db`。文件本体保存在 `storage/`，离线任务暂存于 `storage/offline/`，gopeed 数据保存在 `gopeed/`。已有数据库、数据目录和 `.secret` Cookie 密钥可直接继续使用。
+SQLite 使用 `rusqlite bundled`，数据库文件为 `%APPDATA%/folder-drive/data/folder-drive.db`。文件本体保存在 `storage/`，离线任务暂存于 `storage/offline/`，gopeed 数据保存在 `gopeed/`。数据库、文件、下载引擎数据和 `.secret` 加密密钥共同组成用户数据；迁移时需一起保留。自定义存储目录仍使用设置中保存的路径。
 
 ## 安装与构建
 
@@ -63,13 +65,19 @@ npm run dev:backend
 
 ## 网盘分享下载
 
-1. 在设置中保存对应网盘凭据。夸克、百度填写官网登录请求的 Cookie；UC 沿用原有 Cookie 配置。
+1. 在设置中保存对应网盘凭据。夸克、百度填写官网登录请求的 Cookie；UC 填写 UC 网页版请求头中的 Cookie。
 2. 迅雷填写官网请求头中的 Authorization、X-Captcha-Token 和 X-Device-Id；如请求带 Cookie、X-Client-Version，也填写对应值。校验令牌失效后需从官网重新获取，当前不自动续签。
 3. 打开「链接解析」，每行粘贴一个官方分享链接，可混合 UC、夸克、百度、迅雷；夸克、百度、迅雷支持 URL 中的提取码和同一行中文“提取码”文本。
-4. 浏览目录后下载单个文件、勾选文件，或递归下载当前目录。文件通过 Gopeed 下载，完成后登记到本地文件树；批量文件与现有 UC 行为一致，分别登记到根目录。
+4. 浏览目录后下载单个文件、勾选文件，或递归下载当前目录。文件通过 Gopeed 下载，完成后登记到本地文件树；分享链接批量下载的文件分别登记到根目录。
 5. 夸克、百度、迅雷下载失败或旧直链过期时，可在历史记录中点击重新下载，重新读取分享会话和下载地址。
 
 解析仅连接各网盘官方站点，不接入第三方解析服务。百度使用官方网页分享接口，登录、验证码、会员权益、下载权限及速度遵循官方限制。迅雷普通分享未提供直链时，按官方流程将所选文件转存到本人云盘根目录后取链，转存文件会保留。
+
+## 数据目录与迁移
+
+默认应用数据目录为 `%APPDATA%/folder-drive/`，WebView 数据位于 `%LOCALAPPDATA%/com.folderdrive.app/`。开发环境可通过 `FOLDER_DRIVE_DATA_DIR` 和 `FOLDER_DRIVE_STORAGE_DIR` 覆盖应用数据目录与文件存储目录。
+
+从其他数据目录迁入时，先退出应用和下载引擎，备份后将数据库、`.secret`、`storage/`、`gopeed/` 等一起迁移到新数据目录，数据库文件命名为 `data/folder-drive.db`。数据库和下载引擎任务中若保存了被迁移目录的绝对路径，也需同步迁移；位于目录外的自定义存储路径保持原值。新名称使用独立的应用标识和安装目录，已有安装需手动安装 folder-drive。
 
 ## 应用内更新
 

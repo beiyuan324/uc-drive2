@@ -15,7 +15,7 @@ use tauri::{Manager, RunEvent, WindowEvent};
 
 const MAIN_LABEL: &str = "main";
 
-/// 后端端口文件：%APPDATA%/uc-drive2/server.port。
+/// 后端端口文件：%APPDATA%/folder-drive/server.port。
 /// Rust 后端绑定端口后立即写入，前端仍沿用原有 invoke + 文件回退探测逻辑。
 fn port_file_path() -> PathBuf {
     resolve_data_dir().join("server.port")
@@ -98,7 +98,7 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                 .cloned()
                 .ok_or("no default icon")?,
         )
-        .tooltip("uc-drive2 桌面网盘")
+        .tooltip("folder-drive 个人文件空间")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

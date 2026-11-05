@@ -1,7 +1,7 @@
 //! 路径与目录配置。
 //!
-//! - 数据目录：%APPDATA%/uc-drive2（env UC_DRIVE2_DATA_DIR 可覆盖，测试/开发用）
-//! - 存储根目录：默认 %APPDATA%/uc-drive2/storage（env UC_DRIVE2_STORAGE_DIR 可覆盖），
+//! - 数据目录：%APPDATA%/folder-drive（env FOLDER_DRIVE_DATA_DIR 可覆盖，测试/开发用）
+//! - 存储根目录：默认 %APPDATA%/folder-drive/storage（env FOLDER_DRIVE_STORAGE_DIR 可覆盖），
 //!   运行时可由设置接口切换（Arc<RwLock> 全局态）。
 //! - 所有路径统一正斜杠存 DB（norm_path），FS 操作用原生 PathBuf。
 
@@ -23,29 +23,29 @@ impl Paths {
             data_dir: data_dir.to_path_buf(),
             gopeed_dir: data_dir.join("gopeed"),
             db_dir: data_dir.join("data"),
-            db_file: data_dir.join("data").join("uc-drive.db"),
+            db_file: data_dir.join("data").join("folder-drive.db"),
             port_file: data_dir.join("server.port"),
         }
     }
 }
 
-/// 数据目录解析：env UC_DRIVE2_DATA_DIR > %APPDATA%/uc-drive2 > ~/.uc-drive2
+/// 数据目录解析：env FOLDER_DRIVE_DATA_DIR > %APPDATA%/folder-drive > ~/.folder-drive
 pub fn resolve_data_dir() -> PathBuf {
-    if let Ok(d) = std::env::var("UC_DRIVE2_DATA_DIR") {
+    if let Ok(d) = std::env::var("FOLDER_DRIVE_DATA_DIR") {
         return PathBuf::from(d);
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
-        return PathBuf::from(appdata).join("uc-drive2");
+        return PathBuf::from(appdata).join("folder-drive");
     }
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".uc-drive2")
+    PathBuf::from(home).join(".folder-drive")
 }
 
 /// 网盘存储目录 env 覆盖（测试/开发用），无则 None
 pub fn storage_dir_override() -> Option<PathBuf> {
-    std::env::var("UC_DRIVE2_STORAGE_DIR")
+    std::env::var("FOLDER_DRIVE_STORAGE_DIR")
         .ok()
         .map(PathBuf::from)
 }

@@ -9,7 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const temp = await mkdtemp(join(tmpdir(), 'uc-drive2-cloud-'));
+const temp = await mkdtemp(join(tmpdir(), 'folder-drive-cloud-'));
 const hosts = ['drive-h.quark.cn', 'drive-pc.quark.cn', 'pan.baidu.com', 'api-pan.xunlei.com'];
 const payload = Buffer.from(Array.from({ length: 524288 }, (_, i) => i % 251));
 const failures = [];
@@ -34,7 +34,7 @@ try {
   assert(openssl, '需要 OpenSSL（Windows 可使用 Git 自带的 openssl.exe）');
   const key = join(temp, 'mock.key'), cert = join(temp, 'mock.pem');
   const generated = spawnSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-    '-subj', '/CN=uc-drive2-cloud-tests', '-addext', 'subjectAltName=' + hosts.map((h) => 'DNS:' + h).join(','),
+    '-subj', '/CN=folder-drive-cloud-tests', '-addext', 'subjectAltName=' + hosts.map((h) => 'DNS:' + h).join(','),
     '-keyout', key, '-out', cert], { windowsHide: true, encoding: 'utf8' });
   assert.equal(generated.status, 0, '生成临时测试证书失败：' + generated.stderr);
 
@@ -176,7 +176,7 @@ try {
   child = spawn('cargo', ['test', '--manifest-path', 'src-tauri/Cargo.toml', '--locked',
     '--test', 'cloud_downloads', '--', '--test-threads=1', '--include-ignored'], {
     cwd: root, stdio: 'inherit', windowsHide: true, env: { ...process.env,
-      UCDRIVE2_TEST_HTTPS_PORT: String(tlsPort), UCDRIVE2_TEST_CA: cert, UCDRIVE2_TEST_ROOT: temp },
+      FOLDER_DRIVE_TEST_HTTPS_PORT: String(tlsPort), FOLDER_DRIVE_TEST_CA: cert, FOLDER_DRIVE_TEST_ROOT: temp },
   });
   const timer = setTimeout(() => child.kill(), 15 * 60_000);
   try { exitCode = await new Promise((done, reject) => {
@@ -192,7 +192,7 @@ try {
 } catch (e) { console.error(e.stack ?? e); exitCode = 1; }
 finally {
   await close(tls); await close(files);
-  if (temp.startsWith(join(tmpdir(), 'uc-drive2-cloud-')))
+  if (temp.startsWith(join(tmpdir(), 'folder-drive-cloud-')))
     await rm(temp, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 }
 process.exitCode = exitCode;

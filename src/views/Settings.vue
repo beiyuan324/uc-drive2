@@ -503,7 +503,7 @@ onActivated(refreshAll);
               <div class="card-title-icon">
                 <n-icon :component="InfoIcon" size="18" color="var(--zinc-500)" />
               </div>
-              <span>关于 uc-drive2</span>
+              <span>关于 folder-drive</span>
             </div>
           </template>
           <n-descriptions

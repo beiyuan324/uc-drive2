@@ -91,7 +91,7 @@ export const driveNames: Record<DrivePlatform, string> = {
 
 export interface SettingsInfo {
   storageDir: string;
-  /** 默认存储目录（%APPDATA%/uc-drive2/storage，可恢复） */
+  /** 默认存储目录（%APPDATA%/folder-drive/storage，可恢复） */
   defaultStorageDir?: string;
   dataDir: string;
   gopeedDir: string;

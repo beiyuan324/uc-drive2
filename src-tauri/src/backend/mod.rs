@@ -50,7 +50,7 @@ pub struct AppState {
 
 pub struct StartOptions {
     pub data_dir: PathBuf,
-    /// None = data_dir/storage；Some = env UC_DRIVE2_STORAGE_DIR 语义。
+    /// None = data_dir/storage；Some = env FOLDER_DRIVE_STORAGE_DIR 语义。
     pub storage_dir: Option<PathBuf>,
     pub gopeed_exe: PathBuf,
     pub spawner: Option<Arc<dyn GopeedSpawner>>,
@@ -165,13 +165,13 @@ pub async fn start(options: StartOptions) -> ApiResult<BackendHandle> {
 
     if options.gopeed_exe.exists() || options.spawner.is_some() {
         if let Err(err) = state.gopeed.start().await {
-            eprintln!("[uc-drive2] gopeed 启动失败（离线下载不可用）: {err}");
+            eprintln!("[folder-drive] gopeed 启动失败（离线下载不可用）: {err}");
         } else {
-            eprintln!("[uc-drive2] gopeed 就绪: {:?}", state.gopeed.base());
+            eprintln!("[folder-drive] gopeed 就绪: {:?}", state.gopeed.base());
         }
     } else {
         eprintln!(
-            "[uc-drive2] 未找到 gopeed-web.exe（离线下载不可用）: {}",
+            "[folder-drive] 未找到 gopeed-web.exe（离线下载不可用）: {}",
             options.gopeed_exe.display()
         );
     }
@@ -181,7 +181,7 @@ pub async fn start(options: StartOptions) -> ApiResult<BackendHandle> {
         .map_err(|e| ApiError::internal(format!("端口不可用: {e}")))?;
     std::fs::write(&state.paths.port_file, port.to_string()).map_err(|e| ApiError::from_io(&e))?;
     eprintln!(
-        "[uc-drive2] 后端已监听 http://127.0.0.1:{port}（写入 {}）",
+        "[folder-drive] 后端已监听 http://127.0.0.1:{port}（写入 {}）",
         state.paths.port_file.display()
     );
 

@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use uc_drive2_lib::backend;
-use uc_drive2_lib::backend::config::{resolve_data_dir, storage_dir_override};
+use folder_drive_lib::backend;
+use folder_drive_lib::backend::config::{resolve_data_dir, storage_dir_override};
 
 #[tokio::main]
 async fn main() {

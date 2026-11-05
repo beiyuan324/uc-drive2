@@ -1,11 +1,11 @@
 {
-  "name": "uc-drive2",
-  "version": "2.3.1",
+  "name": "folder-drive",
+  "version": "2.3.2",
   "private": true,
-  "description": "uc-drive2 单用户桌面网盘（Tauri + Vue3 + Rust + SQLite + gopeed）",
+  "description": "folder-drive 个人文件管理与多网盘下载工具（Tauri + Vue3 + Rust + SQLite + Gopeed）",
   "scripts": {
     "dev": "concurrently -k -n backend,web \"npm:dev:backend\" \"npm:dev:web\"",
-    "dev:backend": "cargo run --manifest-path src-tauri/Cargo.toml --example ucdrive2-server",
+    "dev:backend": "cargo run --manifest-path src-tauri/Cargo.toml --example folder-drive-server",
     "dev:web": "vite",
     "build": "vite build",
     "check": "vue-tsc --noEmit",
