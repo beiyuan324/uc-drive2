@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DownloadConfig, FileNode, SettingsInfo, TaskItem, TaskSource, TreeNode, UcFile, UcParseResult, UcSession } from '@/types';
+import type { DownloadConfig, DriveCredential, DriveFile, DriveParseResult, DrivePlatform, DriveSession, DriveShare, FileNode, SettingsInfo, TaskItem, TaskSource, TreeNode, UcFile, UcParseResult, UcSession } from '@/types';
 
 /**
  * 后端 API 客户端。
@@ -159,6 +159,35 @@ export const api = {
     filename: string; size: number; ctoken: string; cookies: string; shareLink: string;
     connections?: number;
   }) => req<TaskItem>('POST', '/api/uc/download', payload),
+
+  // 官方网盘分享：保留 UC 接口，其余平台仅由 Rust 请求各自官网。
+  parseShare: (shareLink: string): Promise<DriveParseResult> =>
+    /https?:\/\/(?:drive|fast)\.uc\.cn\//i.test(shareLink)
+      ? req<UcParseResult>('POST', '/api/uc/parse', { shareLink })
+      : req<DriveParseResult>('POST', '/api/cloud/parse', { shareLink }),
+  listShareFolder: (share: DriveShare, pdirFid: string | null): Promise<{ files: DriveFile[]; session?: DriveSession }> =>
+    share.platform === 'uc'
+      ? req('POST', '/api/uc/list-folder', { shareId: share.shareId, pdirFid, session: share.session })
+      : req('POST', '/api/cloud/list-folder', {
+          platform: share.platform, shareId: share.shareId, session: share.session, pdirFid,
+        }),
+  downloadShare: (share: DriveShare, file: DriveFile, connections?: number): Promise<TaskItem> =>
+    share.platform === 'uc'
+      ? req('POST', '/api/uc/download', {
+          shareId: share.shareId, shareLink: share.shareLink,
+          stoken: share.session.stoken, ctoken: share.session.ctoken, cookies: share.session.cookies,
+          fid: file.fid, shareFidToken: file.share_fid_token, filename: file.name, size: file.size, connections,
+        })
+      : req('POST', '/api/cloud/download', {
+          platform: share.platform, shareId: share.shareId, shareLink: share.shareLink, session: share.session, file,
+        }),
+  redownloadShare: (id: number) => req<TaskItem>('POST', `/api/cloud/redownload/${id}`),
+  driveCredentialStatus: (platform: Exclude<DrivePlatform, 'uc'>) =>
+    req<{ configured: boolean }>('GET', `/api/cloud/credentials/${platform}`),
+  saveDriveCredential: (platform: Exclude<DrivePlatform, 'uc'>, credential: DriveCredential) =>
+    req<{ ok: boolean }>('PUT', `/api/cloud/credentials/${platform}`, credential),
+  clearDriveCredential: (platform: Exclude<DrivePlatform, 'uc'>) =>
+    req<{ ok: boolean }>('DELETE', `/api/cloud/credentials/${platform}`),
 
   // UC Cookie
   cookieStatus: () => req<{ hasCookie: boolean }>('GET', '/api/cookie'),

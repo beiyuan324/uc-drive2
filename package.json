@@ -1,6 +1,6 @@
 {
   "name": "uc-drive2",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "description": "uc-drive2 单用户桌面网盘（Tauri + Vue3 + Rust + SQLite + gopeed）",
   "scripts": {
@@ -8,6 +8,8 @@
     "dev:backend": "cargo run --manifest-path src-tauri/Cargo.toml --example ucdrive2-server",
     "dev:web": "vite",
     "build": "vite build",
+    "check": "vue-tsc --noEmit",
+    "test:cloud": "node scripts/test-cloud.mjs",
     "build:app": "npm run build",
     "tauri:build": "npm run build:app && tauri build",
     "tauri": "tauri"

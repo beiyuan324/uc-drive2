@@ -100,6 +100,12 @@ jobs:
             throw 'gopeed SHA-256 不匹配，停止发布'
           }
 
+      - name: 前端类型检查
+        run: npm run check
+
+      - name: 官方网盘下载集成测试
+        run: npm run test:cloud
+
       - name: 构建签名安装包并上传至草稿
         id: tauri
         uses: tauri-apps/tauri-action@v0

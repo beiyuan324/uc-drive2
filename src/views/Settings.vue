@@ -39,6 +39,7 @@ import { api, getBase } from '@/api';
 import type { ThemeMode } from '@/types';
 import { version } from '../../package.json';
 import AppUpdateSettings from '@/components/AppUpdateSettings.vue';
+import DriveCredentialSettings from '@/components/DriveCredentialSettings.vue';
 
 const message = useMessage();
 const settings = useSettingsStore();
@@ -428,6 +429,16 @@ onActivated(refreshAll);
               保存并发参数
             </n-button>
           </div>
+        </n-card>
+
+        <n-card class="card" :bordered="true">
+          <template #header>
+            <div class="card-title-row">
+              <n-icon :component="ShieldIcon" size="18" color="var(--accent)" />
+              <span>夸克 / 百度 / 迅雷网盘凭据</span>
+            </div>
+          </template>
+          <drive-credential-settings />
         </n-card>
 
         <!-- UC 网盘凭据 -->

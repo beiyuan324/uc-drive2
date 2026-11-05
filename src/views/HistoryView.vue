@@ -14,7 +14,8 @@ import {
 } from '@phosphor-icons/vue';
 import { api, formatSize } from '@/api';
 import FileIcon from '@/components/FileIcon.vue';
-import type { TaskItem } from '@/types';
+import type { DrivePlatform, TaskItem } from '@/types';
+import { driveNames } from '@/types';
 
 const message = useMessage();
 const dialog = useDialog();
@@ -64,7 +65,10 @@ onActivated(load);
 
 async function reDownload(t: TaskItem) {
   try {
-    if (t.source === 'uc') {
+    if (t.source === 'quark' || t.source === 'baidu' || t.source === 'xunlei') {
+      await api.redownloadShare(t.id);
+      message.success('已重新解析官方直链并创建任务');
+    } else if (t.source === 'uc') {
       const uc = (t.metadata?.uc || {}) as Record<string, string>;
       if (!uc.shareLink) return message.error('缺少原始分享链接，无法重新下载');
       const r = await api.ucParse(uc.shareLink);
@@ -93,9 +97,9 @@ async function reDownload(t: TaskItem) {
 
 async function copyLink(t: TaskItem) {
   const link =
-    t.source === 'uc'
-      ? (t.metadata?.uc as Record<string, string>)?.shareLink || t.source_url
-      : t.source_url;
+    (t.metadata?.cloud as Record<string, string> | undefined)?.shareLink
+      || (t.metadata?.uc as Record<string, string> | undefined)?.shareLink
+      || t.source_url;
   try {
     await navigator.clipboard.writeText(link);
     copiedId.value = t.id;
@@ -133,7 +137,7 @@ function fmtTime(iso: string | null) {
 }
 
 function fileName(t: TaskItem): string {
-  const uc = (t.metadata?.uc || {}) as Record<string, string>;
+  const uc = (t.metadata?.uc || t.metadata?.cloud || {}) as Record<string, string>;
   return (
     uc.filename || t.source_url?.split('?')[0]?.split('/').filter(Boolean).pop() || `任务 ${t.id}`
   );
@@ -205,7 +209,7 @@ function fileName(t: TaskItem): string {
             </td>
             <td>
               <span class="source-tag">{{
-                t.source === 'uc' ? 'UC 网盘' : t.source.toUpperCase()
+                driveNames[t.source as DrivePlatform] ? driveNames[t.source as DrivePlatform] + '网盘' : t.source.toUpperCase()
               }}</span>
             </td>
             <td>

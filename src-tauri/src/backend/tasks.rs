@@ -111,6 +111,7 @@ pub struct CreateTaskParams {
     pub filename: Option<String>,
     pub headers: Option<Value>,
     pub uc: Option<Value>,
+    pub cloud: Option<Value>,
     pub connections: Option<i64>,
 }
 
@@ -354,7 +355,7 @@ impl TaskService {
         .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))
     }
 
-    /// 创建任务：source=url|magnet|torrent|uc。
+    /// 创建任务：普通链接、种子和官方网盘直链均由 Gopeed 执行。
     pub async fn create(&self, params: CreateTaskParams) -> ApiResult<TaskDto> {
         let offline = self.storage.offline_dir();
         std::fs::create_dir_all(&offline).map_err(|e| ApiError::from_io(&e))?;
@@ -364,6 +365,8 @@ impl TaskService {
 
         if params.source == "uc" {
             metadata = json!({ "uc": params.uc.clone().unwrap_or_else(|| json!({})) });
+        } else if matches!(params.source.as_str(), "quark" | "baidu" | "xunlei") {
+            metadata = json!({ "cloud": params.cloud.clone().ok_or_else(|| ApiError::bad_request("缺少网盘任务信息"))? });
         } else if params.source == "torrent" {
             if let Some(name) = params.torrent_name.as_deref() {
                 let candidate = self
@@ -494,10 +497,18 @@ impl TaskService {
         let connections = match params.connections {
             Some(v) => v,
             None if params.source == "uc" => self.get_config().uc_connections,
-            None if params.source == "url" => self.get_config().http_connections,
+            None if params.source == "baidu" => 64,
+            None if matches!(params.source.as_str(), "url" | "quark" | "xunlei") => {
+                self.get_config().http_connections
+            }
             None => 0,
         };
-        if connections > 0 && matches!(params.source.as_str(), "uc" | "url") {
+        if connections > 0
+            && matches!(
+                params.source.as_str(),
+                "uc" | "url" | "quark" | "baidu" | "xunlei"
+            )
+        {
             opts["extra"] = json!({ "connections": connections });
         }
         self.gopeed
@@ -1096,4 +1107,3 @@ fn unique_dir(db: &Connection, storage: &Path, name: &str) -> ApiResult<PathBuf>
         i += 1;
     }
 }
-

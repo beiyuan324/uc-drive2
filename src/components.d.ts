@@ -14,6 +14,7 @@ declare module 'vue' {
     AppLayout: typeof import('./components/AppLayout.vue')['default']
     AppUpdateNotice: typeof import('./components/AppUpdateNotice.vue')['default']
     AppUpdateSettings: typeof import('./components/AppUpdateSettings.vue')['default']
+    DriveCredentialSettings: typeof import('./components/DriveCredentialSettings.vue')['default']
     FileIcon: typeof import('./components/FileIcon.vue')['default']
     FileThumbnail: typeof import('./components/FileThumbnail.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

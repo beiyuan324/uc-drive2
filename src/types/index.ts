@@ -11,7 +11,8 @@ export interface FileNode {
   updated_at: string;
 }
 
-export type TaskSource = 'url' | 'magnet' | 'torrent' | 'uc';
+export type DrivePlatform = 'uc' | 'quark' | 'baidu' | 'xunlei';
+export type TaskSource = 'url' | 'magnet' | 'torrent' | DrivePlatform;
 export type TaskStatus = 'queued' | 'running' | 'paused' | 'done' | 'error' | 'cookie_expired' | 'replaced';
 
 export interface TaskItem {
@@ -56,6 +57,37 @@ export interface UcParseResult {
   shareLink: string;
   cookieUsed: boolean;
 }
+
+export interface DriveFile extends UcFile {
+  parent_id?: string;
+}
+
+export type DriveSession = UcSession | Record<string, string>;
+
+export interface DriveShare {
+  platform: DrivePlatform;
+  shareId: string;
+  shareLink: string;
+  session: DriveSession;
+  cookieUsed: boolean;
+}
+
+export interface DriveParseResult extends DriveShare {
+  pdirFid: string | null;
+  files: DriveFile[];
+}
+
+export interface DriveCredential {
+  cookie?: string;
+  authorization?: string;
+  captchaToken?: string;
+  deviceId?: string;
+  clientVersion?: string;
+}
+
+export const driveNames: Record<DrivePlatform, string> = {
+  uc: 'UC', quark: '夸克', baidu: '百度', xunlei: '迅雷',
+};
 
 export interface SettingsInfo {
   storageDir: string;

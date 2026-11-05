@@ -12,6 +12,7 @@ use tokio::task::JoinHandle;
 
 pub mod access_log;
 pub mod config;
+pub mod cloud;
 pub mod crypto;
 pub mod db;
 pub mod error;

@@ -116,7 +116,7 @@ function notify(title: string, body: string) {
 }
 function checkCompleted() {
   for (const t of tasks.tasks) {
-    const uc = (t.metadata?.uc || {}) as Record<string, unknown>;
+    const uc = (t.metadata?.uc || t.metadata?.cloud || {}) as Record<string, unknown>;
     const name = (uc.filename as string) || t.source_url?.split('/').pop() || `任务 ${t.id}`;
     if (t.status === 'done' && !notifiedIds.has(t.id)) {
       notifiedIds.add(t.id);
@@ -201,7 +201,7 @@ const statusMeta: Record<
 };
 
 function taskTitle(t: TaskItem): string {
-  const uc = (t.metadata?.uc || {}) as Record<string, string>;
+  const uc = (t.metadata?.uc || t.metadata?.cloud || {}) as Record<string, string>;
   if (uc.filename) return uc.filename;
   if (t.source === 'magnet')
     return t.source_url?.startsWith('magnet:') ? '磁力任务' : t.source_url || `任务 ${t.id}`;
@@ -213,13 +213,16 @@ function taskTitle(t: TaskItem): string {
 
 function taskLink(t: TaskItem): string | null {
   if (t.source === 'uc') return 'UC 直链解析下载';
+  if (t.source === 'quark') return '夸克官方直链下载';
+  if (t.source === 'baidu') return '百度官方直链下载';
+  if (t.source === 'xunlei') return '迅雷官方直链下载';
   if (t.source === 'magnet') return t.source_url?.slice(0, 60) || null;
   if (t.source === 'torrent') return null;
   return t.source_url || null;
 }
 
 function taskTotal(t: TaskItem): number {
-  const uc = (t.metadata?.uc || {}) as Record<string, unknown>;
+  const uc = (t.metadata?.uc || t.metadata?.cloud || {}) as Record<string, unknown>;
   if (typeof uc.size === 'number' && uc.size > 0) return uc.size;
   if (typeof t.metadata.total === 'number' && t.metadata.total > 0) return t.metadata.total;
   return 0;

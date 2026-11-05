@@ -1,128 +1,67 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useMessage, useDialog } from 'naive-ui';
-import {
-  NButton,
-  NIcon,
-  NInput,
-  NAlert,
-  NEmpty,
-  NSpin,
-  NTable,
-  NSpace,
-  NBreadcrumb,
-  NBreadcrumbItem,
-  NTooltip,
-  NTag,
-  NCheckbox,
-} from 'naive-ui';
-import {
-  PhLink as LinkIcon,
-  PhPlay as ParseIcon,
-  PhDownloadSimple as DownloadIcon,
-  PhFolder as FolderGlyph,
-  PhFile as FileGlyph,
-  PhArrowClockwise as RefreshIcon,
-  PhInfo as InfoIcon,
-  PhArrowsClockwise as RetryIcon,
-  PhFolderOpen as FolderOpenIcon,
-  PhGearSix as GearIcon,
-} from '@phosphor-icons/vue';
+import { useMessage, useDialog, NButton, NIcon, NInput, NAlert, NEmpty, NSpin, NTable,
+  NSpace, NBreadcrumb, NBreadcrumbItem, NTooltip, NTag, NCheckbox } from 'naive-ui';
+import { PhLink as LinkIcon, PhPlay as ParseIcon, PhDownloadSimple as DownloadIcon,
+  PhInfo as InfoIcon, PhFolderOpen as FolderOpenIcon } from '@phosphor-icons/vue';
 import { api, formatSize } from '@/api';
 import { useSettingsStore } from '@/stores/settings';
+import { driveNames } from '@/types';
+import type { DriveFile, DriveParseResult, DriveShare } from '@/types';
 import FileIcon from '@/components/FileIcon.vue';
-import type { UcFile, UcSession } from '@/types';
 
 const message = useMessage();
 const dialog = useDialog();
 const router = useRouter();
 const settings = useSettingsStore();
-
 const shareText = ref('');
 const parsing = ref(false);
-type ParsedShare = {
-  shareId: string;
-  shareLink: string;
-  session: UcSession;
-  cookieUsed: boolean;
-};
-const parsed = ref<ParsedShare[]>([]);
-
-/** 当前正在浏览的链接索引 + 目录栈 */
+const parsed = ref<DriveParseResult[]>([]);
 const activeIdx = ref(-1);
 const crumbStack = ref<{ name: string; pdirFid: string | null }[]>([]);
-const currentFiles = ref<UcFile[]>([]);
+const currentFiles = ref<DriveFile[]>([]);
 const folderLoading = ref(false);
-
-/** 正在创建下载任务的文件 key（按分享和 fid 跟踪，避免给所有行按钮上 loading） */
-const pendingFids = ref<Set<string>>(new Set());
-/** 批量下载进行中的操作，仅用于「下载所选 / 全部下载」按钮的 loading */
+const pendingFids = ref(new Set<string>());
 const batchBusy = ref<'' | 'selected' | 'all'>('');
+const selectedFids = ref(new Set<string>());
+const hasResult = computed(() => parsed.value.length > 0);
+const active = computed(() => parsed.value[activeIdx.value]);
+const currentFileItems = computed(() => currentFiles.value.filter((f) => f.file));
+const isAllSelected = computed(() => currentFileItems.value.length > 0
+  && currentFileItems.value.every((f) => selectedFids.value.has(f.fid)));
+const isIndeterminate = computed(() => {
+  const count = currentFileItems.value.filter((f) => selectedFids.value.has(f.fid)).length;
+  return count > 0 && count < currentFileItems.value.length;
+});
 
-function pendingKey(shareId: string | undefined, fid: string) {
-  return `${shareId ?? ''}:${fid}`;
+function pendingKey(share: DriveShare | undefined, fid: string) {
+  return `${share?.platform}:${share?.shareId}:${fid}`;
 }
 
-function setPendingFids(shareId: string, fids: string[], pending: boolean) {
+function setPending(share: DriveShare, files: DriveFile[], pending: boolean) {
   const next = new Set(pendingFids.value);
-  for (const fid of fids) {
-    const key = pendingKey(shareId, fid);
+  for (const file of files) {
+    const key = pendingKey(share, file.fid);
     if (pending) next.add(key);
     else next.delete(key);
   }
   pendingFids.value = next;
 }
 
-function resetDownloadState() {
-  pendingFids.value = new Set();
-  batchBusy.value = '';
-}
-
-/** 多选勾选集（存放选中的文件 fid） */
-const selectedFids = ref<Set<string>>(new Set());
-
-const hasResult = computed(() => parsed.value.length > 0);
-const active = computed(() => parsed.value[activeIdx.value]);
-
-const currentFileItems = computed(() => currentFiles.value.filter((f) => f.file));
-
-const isAllSelected = computed(() => {
-  const list = currentFileItems.value;
-  return list.length > 0 && list.every((f) => selectedFids.value.has(f.fid));
-});
-
-const isIndeterminate = computed(() => {
-  const list = currentFileItems.value;
-  const count = list.filter((f) => selectedFids.value.has(f.fid)).length;
-  return count > 0 && count < list.length;
-});
-
 function toggleSelect(fid: string) {
   const next = new Set(selectedFids.value);
-  if (next.has(fid)) {
-    next.delete(fid);
-  } else {
-    next.add(fid);
-  }
+  if (next.has(fid)) next.delete(fid);
+  else next.add(fid);
   selectedFids.value = next;
 }
 
 function toggleSelectAll(checked: boolean) {
-  const next = new Set(selectedFids.value);
-  if (checked) {
-    for (const f of currentFileItems.value) next.add(f.fid);
-  } else {
-    for (const f of currentFileItems.value) next.delete(f.fid);
-  }
-  selectedFids.value = next;
+  selectedFids.value = checked ? new Set(currentFileItems.value.map((f) => f.fid)) : new Set();
 }
 
 async function parseAll() {
-  const links = shareText.value
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const links = shareText.value.split('\n').map((s) => s.trim()).filter(Boolean);
   if (!links.length) return message.warning('请输入分享链接');
   parsing.value = true;
   parsed.value = [];
@@ -130,237 +69,147 @@ async function parseAll() {
   currentFiles.value = [];
   crumbStack.value = [];
   selectedFids.value = new Set();
-  resetDownloadState();
   try {
     for (const link of links) {
-      const r = await api.ucParse(link);
-      parsed.value.push({
-        shareId: r.shareId,
-        shareLink: r.shareLink,
-        session: r.session,
-        cookieUsed: r.cookieUsed,
-      });
+      try {
+        parsed.value.push(await api.parseShare(link));
+      } catch (e) {
+        message.error((e as Error).message);
+      }
     }
-    message.success(`解析成功：${parsed.value.length} 个分享链接`);
-    // 进入第一个链接的根目录
-    activeIdx.value = 0;
-    currentFiles.value = parsed.value[0] ? await enterRoot(parsed.value[0]) : [];
-  } catch (e) {
-    message.error((e as Error).message);
+    if (parsed.value.length) {
+      message.success(`已解析 ${parsed.value.length}/${links.length} 个分享`);
+      await switchLink(0);
+    }
   } finally {
     parsing.value = false;
   }
 }
 
-async function enterRoot(p: { shareId: string; session: UcSession }) {
+async function switchLink(idx: number) {
+  activeIdx.value = idx;
   crumbStack.value = [{ name: '分享根目录', pdirFid: null }];
   selectedFids.value = new Set();
-  return loadFolder(p, null);
+  currentFiles.value = parsed.value[idx].files;
 }
 
-async function switchLink(idx: number) {
-  if (idx === activeIdx.value) return;
-  activeIdx.value = idx;
-  selectedFids.value = new Set();
-  const p = parsed.value[idx];
+async function loadFolder(share: DriveParseResult, parent: string | null) {
   folderLoading.value = true;
   try {
-    currentFiles.value = await enterRoot(p);
+    const result = await api.listShareFolder(share, parent);
+    if (result.session) share.session = result.session;
+    if (active.value === share) {
+      currentFiles.value = result.files;
+      selectedFids.value = new Set();
+    }
+    return true;
   } catch (e) {
     message.error((e as Error).message);
+    return false;
   } finally {
     folderLoading.value = false;
   }
 }
 
-async function loadFolder(p: { shareId: string; session: UcSession }, pdirFid: string | null) {
-  folderLoading.value = true;
-  selectedFids.value = new Set();
-  try {
-    const r = await api.ucListFolder(p.shareId, pdirFid, p.session);
-    currentFiles.value = r.files;
-    return r.files;
-  } catch (e) {
-    message.error((e as Error).message);
-    return [];
-  } finally {
-    folderLoading.value = false;
+async function enterFolder(file: DriveFile) {
+  const share = active.value;
+  if (share && await loadFolder(share, file.fid) && active.value === share) {
+    crumbStack.value.push({ name: file.name, pdirFid: file.fid });
   }
 }
 
-async function enterFolder(f: UcFile) {
-  if (!active.value) return;
-  crumbStack.value.push({ name: f.name, pdirFid: f.fid });
-  await loadFolder(active.value, f.fid);
-}
-
-function goCrumb(idx: number) {
-  if (!active.value) return;
+async function goCrumb(idx: number) {
+  const share = active.value;
   const target = crumbStack.value[idx];
-  crumbStack.value = crumbStack.value.slice(0, idx + 1);
-  loadFolder(active.value, target.pdirFid);
+  if (share && await loadFolder(share, target.pdirFid) && active.value === share) {
+    crumbStack.value = crumbStack.value.slice(0, idx + 1);
+  }
 }
 
-/** 清空解析结果，强制下次重新解析（避免 keep-alive 旧会话继续用过期 Cookie） */
-function clearParsedSessions() {
-  parsed.value = [];
-  activeIdx.value = -1;
-  currentFiles.value = [];
-  crumbStack.value = [];
-  selectedFids.value = new Set();
-  resetDownloadState();
-}
-
-/** 下载创建失败；返回 true 表示需要中止当前批量操作。 */
-function handleDownloadError(e: unknown, name = ''): boolean {
+function handleDownloadError(e: unknown, share: DriveShare, name = '') {
   const err = e as Error & { kind?: string };
-  if (err.kind === 'cookie_expired') {
-    clearParsedSessions();
-    message.warning(
-      `${name ? `「${name}」` : ''}UC Cookie 已失效，请到设置中更新后重新解析再下载`,
-      { duration: 8000 },
-    );
-    setTimeout(() => router.push('/settings'), 500);
+  if (err.kind === 'cookie_expired' || err.kind === 'credential_expired') {
+    message.warning(`${driveNames[share.platform]}凭据或校验令牌已失效，请到设置中更新后重新解析`, { duration: 8000 });
     return true;
   }
-  message.error(err.message || '下载失败');
+  message.error(`${name ? name + '：' : ''}${err.message || '下载失败'}`);
   return false;
 }
 
-async function downloadOne(f: UcFile) {
+async function downloadOne(file: DriveFile) {
   const share = active.value;
-  if (!share || pendingFids.value.has(pendingKey(share.shareId, f.fid))) return;
-  setPendingFids(share.shareId, [f.fid], true);
+  if (!share || pendingFids.value.has(pendingKey(share, file.fid))) return;
+  setPending(share, [file], true);
   try {
-    await api.ucDownload({
-      shareId: share.shareId,
-      stoken: share.session.stoken,
-      fid: f.fid,
-      shareFidToken: f.share_fid_token,
-      filename: f.name,
-      size: f.size,
-      ctoken: share.session.ctoken,
-      cookies: share.session.cookies,
-      shareLink: share.shareLink,
-      connections: settings.downloadConfig.ucConnections,
-    });
-    message.success(`已创建任务：${f.name}`);
+    await api.downloadShare(share, file, settings.downloadConfig.ucConnections);
+    message.success(`已创建任务：${file.name}`);
   } catch (e) {
-    handleDownloadError(e, f.name);
+    handleDownloadError(e, share, file.name);
   } finally {
-    setPendingFids(share.shareId, [f.fid], false);
+    setPending(share, [file], false);
   }
 }
 
-async function downloadSelected() {
+async function flattenFiles(share: DriveParseResult, parent: string | null, visited = new Set<string>()): Promise<DriveFile[]> {
+  const key = parent ?? '';
+  if (visited.has(key)) throw new Error('分享目录出现循环，已停止展开');
+  visited.add(key);
+  const result = await api.listShareFolder(share, parent);
+  if (result.session) share.session = result.session;
+  const files: DriveFile[] = [];
+  for (const file of result.files) {
+    if (file.file) files.push(file);
+    else files.push(...await flattenFiles(share, file.fid, visited));
+  }
+  return files;
+}
+
+async function downloadBatch(kind: 'selected' | 'all') {
   const share = active.value;
   if (!share || batchBusy.value) return;
-  const targets = currentFiles.value.filter((f) => f.file && selectedFids.value.has(f.fid));
-  if (!targets.length) return message.warning('请先勾选要下载的文件');
-  batchBusy.value = 'selected';
-  setPendingFids(
-    share.shareId,
-    targets.map((f) => f.fid),
-    true,
-  );
+  batchBusy.value = kind;
+  let targets: DriveFile[] = [];
   try {
-    let created = 0;
-    for (const f of targets) {
-      try {
-        await api.ucDownload({
-          shareId: share.shareId,
-          stoken: share.session.stoken,
-          fid: f.fid,
-          shareFidToken: f.share_fid_token,
-          filename: f.name,
-          size: f.size,
-          ctoken: share.session.ctoken,
-          cookies: share.session.cookies,
-          shareLink: share.shareLink,
-          connections: settings.downloadConfig.ucConnections,
+    if (kind === 'all') {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        dialog.warning({
+          title: '全部下载确认',
+          content: '将为当前目录及子文件夹中的文件创建 Gopeed 下载任务。',
+          positiveText: '开始下载', negativeText: '取消',
+          onPositiveClick: () => resolve(true), onNegativeClick: () => resolve(false),
+          onClose: () => resolve(false), onMaskClick: () => resolve(false),
         });
+      });
+      if (!confirmed) return;
+      const parent = crumbStack.value.at(-1)?.pdirFid ?? null;
+      targets = await flattenFiles(share, parent);
+    } else {
+      targets = currentFiles.value.filter((f) => f.file && selectedFids.value.has(f.fid));
+    }
+    targets = targets.filter((f) => !pendingFids.value.has(pendingKey(share, f.fid)));
+    if (!targets.length) return message.info('没有可创建的下载任务');
+    setPending(share, targets, true);
+    let created = 0;
+    for (const file of targets) {
+      try {
+        await api.downloadShare(share, file, settings.downloadConfig.ucConnections);
         created++;
       } catch (e) {
-        if (handleDownloadError(e, f.name)) return;
+        if (handleDownloadError(e, share, file.name)) break;
       }
     }
-    message.success(`已创建 ${created}/${targets.length} 个下载任务`);
+    message.info(`已创建 ${created}/${targets.length} 个下载任务`);
     if (active.value === share) selectedFids.value = new Set();
+  } catch (e) {
+    message.error((e as Error).message);
   } finally {
-    setPendingFids(
-      share.shareId,
-      targets.map((f) => f.fid),
-      false,
-    );
+    setPending(share, targets, false);
     batchBusy.value = '';
   }
 }
 
-/** 递归展开当前目录全部文件（含子文件夹） */
-async function flattenFiles(
-  p: { shareId: string; session: UcSession },
-  pdirFid: string | null,
-): Promise<UcFile[]> {
-  const r = await api.ucListFolder(p.shareId, pdirFid, p.session);
-  const out: UcFile[] = [];
-  for (const f of r.files) {
-    if (f.file) out.push(f);
-    else out.push(...(await flattenFiles(p, f.fid)));
-  }
-  return out;
-}
-
-async function downloadAll() {
-  const share = active.value;
-  if (!share || batchBusy.value) return;
-  const pdirFid = crumbStack.value[crumbStack.value.length - 1]?.pdirFid ?? null;
-  batchBusy.value = 'all';
-  let all: UcFile[] = [];
-  try {
-    const ok = await dialog.warning({
-      title: '全部下载确认',
-      content: '将下载当前目录（含所有子文件夹）中的所有文件。确定创建批量任务？',
-      positiveText: '开始下载',
-      negativeText: '取消',
-    });
-    if (!ok) return;
-    all = await flattenFiles(share, pdirFid);
-    if (!all.length) return message.info('当前目录没有文件');
-    setPendingFids(
-      share.shareId,
-      all.map((f) => f.fid),
-      true,
-    );
-    let created = 0;
-    for (const f of all) {
-      try {
-        await api.ucDownload({
-          shareId: share.shareId,
-          stoken: share.session.stoken,
-          fid: f.fid,
-          shareFidToken: f.share_fid_token,
-          filename: f.name,
-          size: f.size,
-          ctoken: share.session.ctoken,
-          cookies: share.session.cookies,
-          shareLink: share.shareLink,
-          connections: settings.downloadConfig.ucConnections,
-        });
-        created += 1;
-      } catch (e) {
-        if (handleDownloadError(e, f.name)) return;
-      }
-    }
-    message.success(`已创建 ${created}/${all.length} 个下载任务`);
-  } finally {
-    setPendingFids(
-      share.shareId,
-      all.map((f) => f.fid),
-      false,
-    );
-    batchBusy.value = '';
-  }
-}
+const downloadSelected = () => downloadBatch('selected');
+const downloadAll = () => downloadBatch('all');
 
 function clearAll() {
   shareText.value = '';
@@ -369,7 +218,6 @@ function clearAll() {
   currentFiles.value = [];
   crumbStack.value = [];
   selectedFids.value = new Set();
-  resetDownloadState();
 }
 </script>
 
@@ -385,13 +233,13 @@ function clearAll() {
     <div class="panel">
       <div class="panel-title">
         <n-icon :component="LinkIcon" size="18" />
-        <span>UC 网盘分享链接</span>
+        <span>UC / 夸克 / 百度 / 迅雷分享链接</span>
       </div>
       <n-input
         v-model:value="shareText"
         type="textarea"
         :rows="3"
-        placeholder="粘贴 UC 网盘分享链接，每行一个，支持批量解析&#10;例：https://drive.uc.cn/s/xxxxxxxx?public=1"
+        placeholder="粘贴官方分享链接，每行一个，可包含提取码；支持混合批量解析"
       />
       <n-space class="parse-actions" :size="10">
         <n-button type="primary" :loading="parsing" @click="parseAll">
@@ -409,15 +257,17 @@ function clearAll() {
         class="cookie-tip"
       >
         <div class="cookie-tip-content">
-          <span>部分私密分享或直链刷新需要有效 Cookie。</span>
+          <span>此分享未使用已保存的登录凭据，下载时可能需要先配置。</span>
           <n-button text type="warning" @click="router.push('/settings')"
-            >前往「设置 → UC 网盘 Cookie」配置 &rarr;</n-button
+            >前往「设置 → 网盘凭据」配置 &rarr;</n-button
           >
         </div>
       </n-alert>
     </div>
 
-    <div v-if="parsed.length > 1" class="links-bar">
+    <n-alert v-if="active?.platform === 'xunlei'" type="info" :show-icon="false">迅雷普通分享无直链时，会按官方流程转存到本人云盘根目录后取链；转存文件会保留。</n-alert>
+
+    <div v-if="parsed.length > 0" class="links-bar">
       <span class="links-bar-label">已解析分享：</span>
       <n-tag
         v-for="(p, i) in parsed"
@@ -428,7 +278,7 @@ function clearAll() {
         :title="p.shareLink"
         @click="switchLink(i)"
       >
-        分享 {{ i + 1 }}
+        {{ driveNames[p.platform] }} · 分享 {{ i + 1 }}
       </n-tag>
     </div>
 
@@ -518,7 +368,7 @@ function clearAll() {
                         size="tiny"
                         type="primary"
                         secondary
-                        :loading="pendingFids.has(pendingKey(active?.shareId, f.fid))"
+                        :loading="pendingFids.has(pendingKey(active, f.fid))"
                         @click="downloadOne(f)"
                       >
                         <template #icon
@@ -550,7 +400,7 @@ function clearAll() {
       </n-table>
       <div class="results-foot muted">
         <n-icon :component="InfoIcon" size="14" />
-        <span>直链有时效，大文件下载中断时会自动刷新重试；Cookie 失效时可在「设置」中更新。</span>
+        <span>仅请求各网盘官方接口，统一使用 Gopeed 下载；凭据失效请在设置中更新后重新解析。</span>
       </div>
     </div>
   </div>

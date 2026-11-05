@@ -20,7 +20,11 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 
-use super::crypto::{delete_setting, get_uc_cookie, has_uc_cookie, set_setting, set_uc_cookie};
+use super::cloud::{self, DriveFile};
+use super::crypto::{
+    decrypt_secret, delete_setting, encrypt_secret, get_setting, get_uc_cookie, has_uc_cookie,
+    set_setting, set_uc_cookie,
+};
 use super::error::{ApiError, ApiResult};
 use super::files::{self, RenamePatch};
 use super::models::{download_config_json, ParentRef};
@@ -81,6 +85,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/tasks/{id}/pause", post(pause_task))
         .route("/api/tasks/{id}/resume", post(resume_task))
         .route("/api/tasks/{id}/delete", post(delete_task))
+        .route("/api/cloud/parse", post(cloud_parse))
+        .route("/api/cloud/list-folder", post(cloud_list_folder))
+        .route("/api/cloud/download", post(cloud_download))
+        .route("/api/cloud/redownload/{id}", post(cloud_redownload))
+        .route(
+            "/api/cloud/credentials/{platform}",
+            get(cloud_credential_status)
+                .put(save_cloud_credential)
+                .delete(clear_cloud_credential),
+        )
         .route("/api/uc/parse", post(uc_parse))
         .route("/api/uc/list-folder", post(uc_list_folder))
         .route("/api/uc/download", post(uc_download))
@@ -125,22 +139,67 @@ async fn update_gate_middleware(
     next.run(req).await
 }
 
-async fn cors_middleware(req: Request, next: Next) -> Response {
-    if req.method() == Method::OPTIONS {
-        let mut response = StatusCode::NO_CONTENT.into_response();
-        add_cors_headers(response.headers_mut());
-        return response;
+fn allowed_origin(origin: &str) -> bool {
+    if matches!(
+        origin,
+        "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
+    ) {
+        return true;
     }
-    let mut response = next.run(req).await;
-    add_cors_headers(response.headers_mut());
+    url::Url::parse(origin).is_ok_and(|url| {
+        url.scheme() == "http"
+            && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.path() == "/"
+            && url.query().is_none()
+            && url.fragment().is_none()
+    })
+}
+
+async fn cors_middleware(req: Request, next: Next) -> Response {
+    if let Some(host) = req.headers().get(header::HOST) {
+        let local = host
+            .to_str()
+            .ok()
+            .and_then(|host| url::Url::parse(&format!("http://{host}")).ok())
+            .is_some_and(|url| {
+                matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+                    && url.username().is_empty()
+                    && url.password().is_none()
+            });
+        if !local {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "本地接口仅接受回环地址" })),
+            )
+                .into_response();
+        }
+    }
+    let origin = req.headers().get(header::ORIGIN).cloned();
+    if let Some(origin) = &origin {
+        if !origin.to_str().is_ok_and(allowed_origin) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "禁止外部网页访问本地网盘接口" })),
+            )
+                .into_response();
+        }
+    }
+    let mut response = if req.method() == Method::OPTIONS {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        next.run(req).await
+    };
+    if let Some(origin) = origin {
+        add_cors_headers(response.headers_mut(), origin);
+    }
     response
 }
 
-fn add_cors_headers(headers: &mut HeaderMap) {
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
-    );
+fn add_cors_headers(headers: &mut HeaderMap, origin: HeaderValue) {
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+    headers.insert(header::VARY, HeaderValue::from_static("Origin"));
     headers.insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
         HeaderValue::from_static("GET,POST,PUT,PATCH,DELETE,OPTIONS"),
@@ -729,6 +788,7 @@ async fn create_task(
         filename: object.and_then(|o| o.get("filename")).map(value_to_string),
         headers: object.and_then(|o| o.get("headers")).cloned(),
         uc: object.and_then(|o| o.get("uc")).cloned(),
+        cloud: object.and_then(|o| o.get("cloud")).cloned(),
         connections: value_i64(object.and_then(|o| o.get("connections"))),
     };
     let task = state.tasks.create(params).await?;
@@ -795,6 +855,248 @@ async fn delete_task(
         .unwrap_or(false);
     state.tasks.remove(id, force).await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+fn cloud_credential(state: &AppState, platform: &str) -> ApiResult<Value> {
+    cloud::platform_name(platform)?;
+    let db = state.db.lock().unwrap();
+    let encrypted = get_setting(&db, &format!("cloud_{platform}"), "");
+    if encrypted.is_empty() {
+        return Ok(json!({}));
+    }
+    let plain = decrypt_secret(&state.paths.data_dir, &encrypted);
+    serde_json::from_str(&plain).map_err(|_| ApiError::internal("网盘凭据读取失败，请重新保存"))
+}
+
+async fn cloud_credential_status(
+    State(state): State<Arc<AppState>>,
+    AxumPath(platform): AxumPath<String>,
+) -> ApiResult<Json<Value>> {
+    let credential = cloud_credential(&state, &platform)?;
+    Ok(Json(
+        json!({ "configured": credential.as_object().is_some_and(|o| o.values().any(|v| v.as_str().is_some_and(|s| !s.is_empty()))) }),
+    ))
+}
+
+async fn save_cloud_credential(
+    State(state): State<Arc<AppState>>,
+    AxumPath(platform): AxumPath<String>,
+    BodyJson(body): BodyJson,
+) -> ApiResult<Json<Value>> {
+    cloud::platform_name(&platform)?;
+    let fields: &[&str] = if platform == "xunlei" {
+        &[
+            "cookie",
+            "authorization",
+            "captchaToken",
+            "deviceId",
+            "clientVersion",
+        ]
+    } else {
+        &["cookie"]
+    };
+    let mut credential = cloud_credential(&state, &platform)?;
+    for key in fields {
+        if let Some(value) = body.get(*key) {
+            let value = value
+                .as_str()
+                .ok_or_else(|| ApiError::bad_request("凭据必须为文本"))?
+                .trim();
+            if value.contains(['\r', '\n']) {
+                return Err(ApiError::bad_request("请粘贴单个请求头的值，不能包含换行"));
+            }
+            if !value.is_empty() {
+                credential[*key] = json!(value);
+            }
+        }
+    }
+    if credential.as_object().is_none_or(|o| o.is_empty()) {
+        return Err(ApiError::bad_request("请输入凭据"));
+    }
+    let db = state.db.lock().unwrap();
+    set_setting(
+        &db,
+        &format!("cloud_{platform}"),
+        &encrypt_secret(&state.paths.data_dir, &credential.to_string()),
+    );
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn clear_cloud_credential(
+    State(state): State<Arc<AppState>>,
+    AxumPath(platform): AxumPath<String>,
+) -> ApiResult<Json<Value>> {
+    cloud::platform_name(&platform)?;
+    let db = state.db.lock().unwrap();
+    delete_setting(&db, &format!("cloud_{platform}"));
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn cloud_parse(
+    State(state): State<Arc<AppState>>,
+    BodyJson(body): BodyJson,
+) -> ApiResult<Json<Value>> {
+    let link = body["shareLink"]
+        .as_str()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request("缺少分享链接"))?;
+    let (platform, _, _, _) = cloud::parse_link(link)?;
+    let credential = cloud_credential(&state, &platform)?;
+    Ok(Json(cloud::parse(&state.client, link, &credential).await?))
+}
+
+async fn cloud_list_folder(
+    State(state): State<Arc<AppState>>,
+    BodyJson(mut body): BodyJson,
+) -> ApiResult<Json<Value>> {
+    let platform = cloud::text(&body, "platform");
+    let share_id = cloud::text(&body, "shareId");
+    if share_id.is_empty() {
+        return Err(ApiError::bad_request("缺少分享 ID"));
+    }
+    let parent = body["pdirFid"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let credential = cloud_credential(&state, &platform)?;
+    let session = body
+        .get_mut("session")
+        .filter(|v| v.is_object())
+        .ok_or_else(|| ApiError::bad_request("缺少分享会话"))?;
+    let files = cloud::list_folder(
+        &state.client,
+        &platform,
+        &share_id,
+        parent.as_deref(),
+        session,
+        &credential,
+    )
+    .await?;
+    Ok(Json(json!({ "files": files, "session": session })))
+}
+
+async fn create_cloud_download(
+    state: &AppState,
+    body: &Value,
+) -> ApiResult<super::models::TaskDto> {
+    let platform = cloud::text(body, "platform");
+    cloud::platform_name(&platform)?;
+    let share_id = cloud::text(body, "shareId");
+    let share_link = cloud::text(body, "shareLink");
+    let (link_platform, link_id, _, _) = cloud::parse_link(&share_link)?;
+    if platform != link_platform || share_id != link_id {
+        return Err(ApiError::bad_request(
+            "分享链接与网盘会话不一致，请重新解析",
+        ));
+    }
+    let file: DriveFile = serde_json::from_value(body["file"].clone())
+        .map_err(|_| ApiError::bad_request("缺少有效文件参数"))?;
+    if file.fid.is_empty() || file.name.is_empty() {
+        return Err(ApiError::bad_request("文件 ID 或名称为空"));
+    }
+    let filename: String = basename_of(&file.name)
+        .chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .trim_end_matches(['.', ' '])
+        .to_string();
+    if filename.is_empty() || filename == "." || filename == ".." {
+        return Err(ApiError::bad_request("文件名无效"));
+    }
+    let credential = cloud_credential(state, &platform)?;
+    let resolved = cloud::resolve(
+        &state.client,
+        &platform,
+        &share_id,
+        &body["session"],
+        &file,
+        &credential,
+    )
+    .await?;
+    // 只记录重新解析需要的文件信息，不把 Cookie、Authorization 或校验令牌写入任务元数据。
+    state
+        .tasks
+        .create(CreateTaskParams {
+            source: platform,
+            url: Some(resolved.url),
+            torrent_id: None,
+            torrent_name: None,
+            filename: Some(filename.clone()),
+            headers: Some(resolved.headers),
+            uc: None,
+            cloud: Some(json!({
+                "shareId": share_id, "shareLink": share_link, "file": file,
+                "filename": filename, "size": file.size,
+                "parentId": file.parent_id, "passcode": cloud::text(&body["session"], "passcode")
+            })),
+            connections: None,
+        })
+        .await
+}
+
+async fn cloud_download(
+    State(state): State<Arc<AppState>>,
+    BodyJson(body): BodyJson,
+) -> ApiResult<(StatusCode, Json<super::models::TaskDto>)> {
+    Ok((
+        StatusCode::CREATED,
+        Json(create_cloud_download(&state, &body).await?),
+    ))
+}
+
+async fn cloud_redownload(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<i64>,
+) -> ApiResult<(StatusCode, Json<super::models::TaskDto>)> {
+    let task = state
+        .tasks
+        .get(id)?
+        .ok_or_else(|| ApiError::not_found("任务不存在"))?;
+    cloud::platform_name(&task.source)?;
+    let meta = &task.metadata["cloud"];
+    let link = cloud::text(meta, "shareLink");
+    let mut url =
+        url::Url::parse(&link).map_err(|_| ApiError::bad_request("任务缺少原始分享链接"))?;
+    let passcode = cloud::text(meta, "passcode");
+    if !passcode.is_empty() {
+        url.query_pairs_mut().clear().append_pair("pwd", &passcode);
+    }
+    let credential = cloud_credential(&state, &task.source)?;
+    let mut parsed = cloud::parse(&state.client, url.as_str(), &credential).await?;
+    let parent = cloud::text(meta, "parentId");
+    let file_id = cloud::text(&meta["file"], "fid");
+    let file = if parent.is_empty() {
+        parsed["files"]
+            .as_array()
+            .and_then(|a| a.iter().find(|f| cloud::text(f, "fid") == file_id))
+            .cloned()
+    } else {
+        let files = cloud::list_folder(
+            &state.client,
+            &task.source,
+            &cloud::text(&parsed, "shareId"),
+            Some(&parent),
+            &mut parsed["session"],
+            &credential,
+        )
+        .await?;
+        files
+            .into_iter()
+            .find(|f| f.fid == file_id)
+            .map(|f| json!(f))
+    }
+    .ok_or_else(|| ApiError::not_found("分享中已找不到该文件"))?;
+    parsed["file"] = file;
+    Ok((
+        StatusCode::CREATED,
+        Json(create_cloud_download(&state, &parsed).await?),
+    ))
 }
 
 async fn uc_parse(
@@ -966,6 +1268,7 @@ async fn uc_download(
             filename: object.and_then(|o| o.get("filename")).map(value_to_string),
             headers: Some(headers),
             uc: Some(uc_meta),
+            cloud: None,
             connections: value_i64(object.and_then(|o| o.get("connections"))),
         })
         .await?;
@@ -1009,4 +1312,3 @@ async fn history(
 async fn clear_history(State(state): State<Arc<AppState>>) -> ApiResult<Json<Value>> {
     Ok(Json(json!({ "deleted": state.tasks.clear_history()? })))
 }
-
