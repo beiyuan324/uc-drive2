@@ -15,8 +15,6 @@ import {
   NRadioButton,
   NSpace,
   NTooltip,
-  NTabs,
-  NTab,
 } from 'naive-ui';
 import {
   PhLink as LinkIcon,

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DownloadConfig, DriveCredential, DriveFile, DriveParseResult, DrivePlatform, DriveSession, DriveShare, FileNode, SettingsInfo, TaskItem, TaskSource, TreeNode, UcFile, UcParseResult, UcSession } from '@/types';
+import type { DownloadConfig, DriveCredential, DriveFile, DriveParseResult, DrivePlatform, DriveSession, DriveShare, FileNode, SettingsInfo, TaskItem, TaskSource, TreeNode, UcParseResult } from '@/types';
 
 /**
  * 后端 API 客户端。
@@ -98,7 +98,6 @@ export const api = {
   // 文件
   listFiles: (parent: number | null) =>
     req<FileNode[]>('GET', '/api/files' + (parent == null ? '?parent=root' : `?parent=${parent}`)),
-  getFile: (id: number) => req<FileNode>('GET', `/api/files/${id}`),
   /** 祖先链（含自身，根 → 目标），一次请求拿全面包屑 */
   ancestors: (id: number) => req<FileNode[]>('GET', `/api/files/${id}/ancestors`),
   mkdir: (name: string, parent: number | null) =>
@@ -145,15 +144,12 @@ export const api = {
   deleteTask: (id: number, force = false) => req<{ ok: boolean }>('POST', `/api/tasks/${id}/delete`, { force }),
 
   // 下载参数
-  downloadConfig: () => req<DownloadConfig>('GET', '/api/tasks/config'),
   saveDownloadConfig: (patch: Partial<DownloadConfig>) =>
     req<DownloadConfig>('PUT', '/api/tasks/config', patch),
 
   // UC 网盘解析
   ucParse: (shareLink: string, cookie?: string) =>
     req<UcParseResult>('POST', '/api/uc/parse', { shareLink, cookie }),
-  ucListFolder: (shareId: string, pdirFid: string | null, session: UcSession) =>
-    req<{ files: UcFile[] }>('POST', '/api/uc/list-folder', { shareId, pdirFid, session }),
   ucDownload: (payload: {
     shareId: string; stoken: string; fid: string; shareFidToken: string;
     filename: string; size: number; ctoken: string; cookies: string; shareLink: string;

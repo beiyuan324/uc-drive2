@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::broadcast;
 
-use super::util::{direct_client, encode_uri_component, now_ms};
+use super::util::{direct_client, encode_uri_component};
 use super::winutil::{terminate_pid, CREATE_NO_WINDOW};
 
 const HOST: &str = "127.0.0.1";
@@ -515,10 +515,5 @@ impl GopeedManager {
 fn free_port() -> std::io::Result<u16> {
     let listener = std::net::TcpListener::bind((HOST, 0))?;
     Ok(listener.local_addr()?.port())
-}
-
-#[allow(dead_code)]
-fn _timestamp_for_logs() -> i64 {
-    now_ms()
 }
 
