@@ -22,6 +22,7 @@ import {
   PhFloppyDisk as SaveIcon,
   PhFolderOpen as FolderOpenIcon,
   PhCopy as CopyIcon,
+  PhCheck as CheckIcon,
   PhSun as SunIcon,
   PhMoon as MoonIcon,
   PhMonitor as MonitorIcon,
