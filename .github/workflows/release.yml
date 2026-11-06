@@ -103,6 +103,12 @@ jobs:
       - name: 前端类型检查
         run: npm run check
 
+      - name: 开发进程管理测试
+        run: npm test
+
+      - name: 时间与凭据兼容性测试
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --lib --test dependency_replacements
+
       - name: 官方网盘下载集成测试
         run: npm run test:cloud
 

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use rand_core::{OsRng, RngCore};
 use reqwest::{Client, Method, StatusCode};
 use serde_json::{json, Value};
 use folder_drive_lib::backend::{self, cloud, crypto, routes, AppState, StartOptions};
@@ -25,9 +26,9 @@ fn official_client() -> Client {
     )
     .parse()
     .unwrap();
-    let mut builder = Client::builder()
+    let mut builder = backend::http_client_builder()
         .no_proxy()
-        .add_root_certificate(reqwest::Certificate::from_pem(&cert).unwrap())
+        .tls_certs_merge([reqwest::Certificate::from_pem(&cert).unwrap()])
         .dns_resolver(Arc::new(DenyExternalDns));
     for host in [
         "drive-h.quark.cn",
@@ -324,7 +325,7 @@ impl Drop for TestApp {
 impl TestApp {
     async fn new(engine: bool) -> Self {
         let data = PathBuf::from(std::env::var("FOLDER_DRIVE_TEST_ROOT").unwrap())
-            .join(format!("app-{}", rand::random::<u64>()));
+            .join(format!("app-{}", OsRng.next_u64()));
         let exe = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bin/gopeed/gopeed-web.exe");
         let options = StartOptions::new(data, None, exe);
         let mut state = match Arc::try_unwrap(backend::build_state(&options).unwrap()) {
@@ -344,7 +345,7 @@ impl TestApp {
         let app = Self {
             state,
             base,
-            http: Client::builder().no_proxy().build().unwrap(),
+            http: backend::http_client_builder().no_proxy().build().unwrap(),
             server,
         };
         if engine {

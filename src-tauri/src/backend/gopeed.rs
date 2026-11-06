@@ -123,8 +123,8 @@ impl GopeedManager {
     ) -> Arc<Self> {
         let (events, _) = broadcast::channel(32);
         let mut bytes = [0u8; 16];
-        use rand::RngCore;
-        rand::thread_rng().fill_bytes(&mut bytes);
+        use rand_core::{OsRng, RngCore};
+        OsRng.fill_bytes(&mut bytes);
         let token = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
         Arc::new(GopeedManager {
             exe_path,
@@ -133,7 +133,7 @@ impl GopeedManager {
             spawner,
             // 本地回环必须直连：reqwest 默认启用 system-proxy，会读取 Windows 系统代理
             // （如 Clash 127.0.0.1:7897），把对 gopeed 的 127.0.0.1 请求转发给代理导致 502/超时。
-            client: reqwest::Client::builder()
+            client: super::http_client_builder()
                 .no_proxy()
                 .build()
                 .expect("reqwest client"),

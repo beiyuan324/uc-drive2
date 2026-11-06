@@ -244,7 +244,7 @@ fn merge_set_cookies(cookies: &mut String, ctoken: &mut String, set_cookies: &[S
 /// 手动处理重定向以免丢失中间响应的 Cookie；与现有 follow 语义一致。
 pub async fn get_ctoken(share_link: &str, cookie: &str) -> Result<UcSession, String> {
     let first_url = share_link.split('#').next().unwrap_or(share_link);
-    let redirect_client = Client::builder()
+    let redirect_client = super::http_client_builder()
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .build()

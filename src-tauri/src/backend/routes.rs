@@ -328,8 +328,8 @@ fn resolve_path(raw: &str) -> PathBuf {
 }
 
 fn random_suffix() -> String {
-    use rand::Rng;
-    format!("{:x}", rand::thread_rng().gen::<u64>())
+    use rand_core::{OsRng, RngCore};
+    format!("{:x}", OsRng.next_u64())
 }
 
 fn ensure_dirs(state: &AppState) -> ApiResult<()> {

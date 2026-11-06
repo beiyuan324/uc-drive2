@@ -33,6 +33,12 @@ use error::{ApiError, ApiResult};
 use gopeed::{GopeedManager, GopeedSpawner};
 use tasks::TaskService;
 
+// 与更新器共用 Ring；已初始化时保留现有提供者，避免依赖更新器的启动顺序。
+pub fn http_client_builder() -> reqwest::ClientBuilder {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::builder()
+}
+
 pub const BASE_PORT: u16 = 17210;
 const PORT_TRIES: u16 = 20;
 
@@ -129,7 +135,7 @@ pub fn build_state(options: &StartOptions) -> ApiResult<Arc<AppState>> {
         )
     };
     // UC/OSS 直连，不读系统代理：与旧 Node(undici) 行为一致，避免本地代理规则干扰下载直链。
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .no_proxy()
         .build()
         .expect("reqwest client");

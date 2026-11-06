@@ -2,6 +2,7 @@
 //! 密钥：%APPDATA%/folder-drive/.secret（首次随机 32 字节生成，随用户数据走，卸载即失）。
 //! 密文格式：`v1:{iv_b64}:{tag_b64}:{data_b64}`（与既有格式完全兼容，可互相解密）。
 
+use rand_core::{OsRng, RngCore};
 use rusqlite::Connection;
 
 use super::util::now_iso;
@@ -21,9 +22,8 @@ fn load_key(data_dir: &std::path::Path) -> [u8; 32] {
             return key;
         }
     }
-    use rand::RngCore;
     let mut key = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut key);
+    OsRng.fill_bytes(&mut key);
     let _ = std::fs::write(&path, key);
     key
 }
@@ -51,8 +51,7 @@ pub fn encrypt_secret(data_dir: &std::path::Path, plain: &str) -> String {
         Err(_) => return String::new(),
     };
     let mut iv = [0u8; 12];
-    use rand::Rng;
-    rand::thread_rng().fill(&mut iv);
+    OsRng.fill_bytes(&mut iv);
     let nonce = Nonce::from_slice(&iv);
     match cipher.encrypt(nonce, plain.as_bytes()) {
         // aes-gcm crate 输出 ciphertext||tag（tag 固定 16 字节，在末尾）
