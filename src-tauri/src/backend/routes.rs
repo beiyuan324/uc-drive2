@@ -29,7 +29,10 @@ use super::error::{ApiError, ApiResult};
 use super::files::{self, RenamePatch};
 use super::models::{download_config_json, ParentRef};
 use super::tasks::{ConfigPatch, CreateTaskParams};
-use super::util::{basename_of, encode_uri_component, is_previewable, mime_of, norm_path, now_ms};
+use super::util::{
+    basename_of, encode_uri_component, is_previewable, mime_of, norm_path, now_ms, resolve_path,
+    value_i64,
+};
 use super::AppState;
 
 const MAX_UPLOAD_FILE_SIZE: u64 = 4 * 1024 * 1024 * 1024;
@@ -314,17 +317,6 @@ async fn set_storage_dir(
         obj.insert("movedFiles".to_string(), json!(moved));
     }
     Ok(Json(payload))
-}
-
-fn resolve_path(raw: &str) -> PathBuf {
-    let path = PathBuf::from(raw);
-    if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(path)
-    }
 }
 
 fn random_suffix() -> String {
@@ -752,14 +744,6 @@ fn value_to_string(value: &Value) -> String {
         Value::Null => "null".to_string(),
         _ => value.to_string(),
     }
-}
-
-fn value_i64(value: Option<&Value>) -> Option<i64> {
-    value.and_then(|v| match v {
-        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|x| x as i64)),
-        Value::String(s) => s.parse::<i64>().ok(),
-        _ => None,
-    })
 }
 
 async fn list_tasks(
@@ -1240,13 +1224,7 @@ async fn uc_download(
             "url_invalid",
         ));
     }
-    let headers = json!({
-        "Cookie": cookies,
-        "User-Agent": super::uc::UA,
-        "Referer": "https://drive.uc.cn/",
-        "Origin": "https://drive.uc.cn",
-        "x-csrf-token": ctoken,
-    });
+    let headers = super::uc::download_headers(&cookies, &ctoken);
     let uc_meta = json!({
         "shareId": share_id,
         "stoken": stoken,

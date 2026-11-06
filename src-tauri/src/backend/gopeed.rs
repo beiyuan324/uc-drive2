@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::broadcast;
 
-use super::util::{encode_uri_component, now_ms};
+use super::util::{direct_client, encode_uri_component, now_ms};
 use super::winutil::{terminate_pid, CREATE_NO_WINDOW};
 
 const HOST: &str = "127.0.0.1";
@@ -133,10 +133,7 @@ impl GopeedManager {
             spawner,
             // 本地回环必须直连：reqwest 默认启用 system-proxy，会读取 Windows 系统代理
             // （如 Clash 127.0.0.1:7897），把对 gopeed 的 127.0.0.1 请求转发给代理导致 502/超时。
-            client: reqwest::Client::builder()
-                .no_proxy()
-                .build()
-                .expect("reqwest client"),
+            client: direct_client(),
             inner: Mutex::new(ManagerInner {
                 pid: None,
                 port: None,

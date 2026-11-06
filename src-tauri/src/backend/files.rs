@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use super::error::{ApiError, ApiResult};
 use super::models::{FileDto, ParentRef, TreeNode};
 use super::util::{
-    assert_inside, basename_of, mime_of, norm_path, now_iso, relative_suffix, scan_dir,
+    assert_inside, basename_of, mime_of, move_path, norm_path, now_iso, relative_suffix, scan_dir,
     unique_path, walk_files,
 };
 use super::winutil::CREATE_NO_WINDOW;
@@ -42,10 +42,6 @@ impl FileRow {
             updated_at: self.updated_at.clone(),
         }
     }
-}
-
-fn db_error(err: rusqlite::Error) -> ApiError {
-    ApiError::internal(format!("数据库错误: {err}"))
 }
 
 fn io_error(err: std::io::Error) -> ApiError {
@@ -86,13 +82,13 @@ pub fn child_rows(db: &Connection, parent: &ParentRef) -> ApiResult<Vec<FileRow>
                 "SELECT id, name, parent_id, is_dir, path, size, mime, created_at, updated_at
                  FROM files WHERE parent_id IS NULL",
             )
-            .map_err(db_error)?,
+            .map_err(ApiError::from_db)?,
         ParentRef::Id(_id) => db
             .prepare(
                 "SELECT id, name, parent_id, is_dir, path, size, mime, created_at, updated_at
                  FROM files WHERE parent_id = ?1",
             )
-            .map_err(db_error)?,
+            .map_err(ApiError::from_db)?,
         ParentRef::Invalid => return Err(ApiError::not_found("目录不存在")),
     };
     let rows = match parent {
@@ -100,9 +96,9 @@ pub fn child_rows(db: &Connection, parent: &ParentRef) -> ApiResult<Vec<FileRow>
         ParentRef::Id(id) => stmt.query_map([id], row_from_sql),
         ParentRef::Invalid => unreachable!(),
     }
-    .map_err(db_error)?;
+    .map_err(ApiError::from_db)?;
     for row in rows {
-        out.push(row.map_err(db_error)?);
+        out.push(row.map_err(ApiError::from_db)?);
     }
     Ok(out)
 }
@@ -159,7 +155,7 @@ pub fn list_dir(db: &Connection, storage: &Path, parent: &ParentRef) -> ApiResul
                 OR files.size != excluded.size
                 OR files.mime != excluded.mime",
         )
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     let ts = now_iso();
     for entry in &entries {
         let path = dir_path.join(&entry.name);
@@ -180,17 +176,17 @@ pub fn list_dir(db: &Connection, storage: &Path, parent: &ParentRef) -> ApiResul
                 ts,
                 ts,
             ])
-            .map_err(db_error)?;
+            .map_err(ApiError::from_db)?;
     }
     drop(upsert);
 
     // FK ON DELETE CASCADE 会同时清掉缺失目录的递归后代。
     let mut delete = db
         .prepare("DELETE FROM files WHERE id = ?1")
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     for row in existing {
         if !entries_path_contains(&dir_path, &row.path, &entries) {
-            delete.execute([row.id]).map_err(db_error)?;
+            delete.execute([row.id]).map_err(ApiError::from_db)?;
         }
     }
     drop(delete);
@@ -229,22 +225,6 @@ fn prune_missing(db: &Connection, dir_path: &Path) {
     }
 }
 
-fn is_cross_device(err: &std::io::Error) -> bool {
-    err.raw_os_error() == Some(17) || err.kind() == std::io::ErrorKind::CrossesDevices
-}
-
-/// 跨卷移动（跨卷时降级为复制+删除）。
-fn move_path(src: &Path, dest: &Path) -> std::io::Result<()> {
-    match std::fs::rename(src, dest) {
-        Ok(()) => Ok(()),
-        Err(err) if is_cross_device(&err) => {
-            std::fs::copy(src, dest)?;
-            std::fs::remove_file(src)
-        }
-        Err(err) => Err(err),
-    }
-}
-
 /// 迁移存储根目录，返回实际移动的文件数。
 pub fn move_storage_dir(db: &Connection, from: &Path, to: &Path) -> ApiResult<i64> {
     let old_root = norm_path(from);
@@ -258,12 +238,12 @@ pub fn move_storage_dir(db: &Connection, from: &Path, to: &Path) -> ApiResult<i6
             "SELECT id, name, parent_id, is_dir, path, size, mime, created_at, updated_at
              FROM files ORDER BY is_dir DESC, id ASC",
         )
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     let rows = stmt
         .query_map([], row_from_sql)
-        .map_err(db_error)?
+        .map_err(ApiError::from_db)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     drop(stmt);
 
     let mut moved = 0i64;
@@ -289,7 +269,7 @@ pub fn move_storage_dir(db: &Connection, from: &Path, to: &Path) -> ApiResult<i6
             "UPDATE files SET path = ?1 WHERE id = ?2",
             params![norm_path(&dest), row.id],
         )
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     }
     Ok(moved)
 }
@@ -336,7 +316,7 @@ pub fn mkdir(
              VALUES (?1, ?2, 1, ?3, 0, '', ?4, ?5)",
             params![actual_name, pid, path, ts, ts],
         )
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     let _ = inserted;
     get_row(db, db.last_insert_rowid())
         .map(|r| r.dto())
@@ -391,7 +371,7 @@ pub fn rename(db: &Connection, storage: &Path, id: i64, patch: RenamePatch) -> A
         "UPDATE files SET name = ?1, parent_id = ?2, path = ?3, updated_at = ?4 WHERE id = ?5",
         params![name, new_parent, new_db_path, now_iso(), row.id],
     )
-    .map_err(db_error)?;
+    .map_err(ApiError::from_db)?;
     if row.is_dir && row.path != new_db_path {
         for (desc_id, desc_path) in collect_descendants(db, row.id)? {
             if let Some(relative) = desc_path.strip_prefix(&row.path) {
@@ -400,7 +380,7 @@ pub fn rename(db: &Connection, storage: &Path, id: i64, patch: RenamePatch) -> A
                     "UPDATE files SET path = ?1 WHERE id = ?2",
                     params![child_path, desc_id],
                 )
-                .map_err(db_error)?;
+                .map_err(ApiError::from_db)?;
             }
         }
     }
@@ -413,12 +393,12 @@ fn collect_descendants(db: &Connection, id: i64) -> ApiResult<Vec<(i64, String)>
     let mut result = Vec::new();
     let mut stmt = db
         .prepare("SELECT id, path FROM files WHERE parent_id = ?1")
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     let rows = stmt
         .query_map([id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
-        .map_err(db_error)?
+        .map_err(ApiError::from_db)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     drop(stmt);
     for (child_id, path) in rows {
         result.push((child_id, path));
@@ -502,7 +482,7 @@ pub async fn remove(db: &Mutex<Connection>, storage: &Path, id: i64) -> ApiResul
     }
     let conn = db.lock().unwrap();
     conn.execute("DELETE FROM files WHERE id = ?1", [row.id])
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     Ok(())
 }
 
@@ -537,7 +517,7 @@ pub fn register_upload(
             ts,
         ],
     )
-    .map_err(db_error)?;
+    .map_err(ApiError::from_db)?;
     get_row(db, db.last_insert_rowid())
         .map(|r| r.dto())
         .ok_or_else(|| ApiError::internal("文件登记失败"))
@@ -550,18 +530,18 @@ pub fn search(db: &Connection, query: &str, limit: i64) -> ApiResult<Vec<FileDto
             "SELECT id, name, parent_id, is_dir, path, size, mime, created_at, updated_at
              FROM files WHERE name LIKE ?1 ORDER BY is_dir DESC, name LIMIT ?2",
         )
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     let rows = stmt
         .query_map(params![like, limit], row_from_sql)
-        .map_err(db_error)?;
-    rows.map(|row| row.map(|r| r.dto()).map_err(db_error))
+        .map_err(ApiError::from_db)?;
+    rows.map(|row| row.map(|r| r.dto()).map_err(ApiError::from_db))
         .collect()
 }
 
 pub fn tree(db: &Connection) -> ApiResult<Vec<TreeNode>> {
     let mut stmt = db
         .prepare("SELECT id, name, path, parent_id FROM files WHERE is_dir = 1 ORDER BY name")
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     let rows = stmt
         .query_map([], |r| {
             Ok((
@@ -571,9 +551,9 @@ pub fn tree(db: &Connection) -> ApiResult<Vec<TreeNode>> {
                 r.get::<_, Option<i64>>(3)?,
             ))
         })
-        .map_err(db_error)?
+        .map_err(ApiError::from_db)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)?;
+        .map_err(ApiError::from_db)?;
     drop(stmt);
     fn build(parent: Option<i64>, rows: &[(i64, String, String, Option<i64>)]) -> Vec<TreeNode> {
         rows.iter()
@@ -629,7 +609,7 @@ pub fn upsert_file_row(
                         |r| r.get(0),
                     )
                     .optional()
-                    .map_err(db_error)?;
+                    .map_err(ApiError::from_db)?;
                 parent_id = if let Some(existing) = existing {
                     Some(existing)
                 } else {
@@ -639,7 +619,7 @@ pub fn upsert_file_row(
                          VALUES (?1, ?2, 1, ?3, 0, '', ?4, ?5)",
                         params![part, parent_id, current_norm, ts, ts],
                     )
-                    .map_err(db_error)?;
+                    .map_err(ApiError::from_db)?;
                     Some(db.last_insert_rowid())
                 };
             }
@@ -667,7 +647,7 @@ pub fn upsert_file_row(
             ts,
         ],
     )
-    .map_err(db_error)?;
+    .map_err(ApiError::from_db)?;
     Ok(())
 }
 

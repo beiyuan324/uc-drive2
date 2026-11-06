@@ -46,6 +46,16 @@ pub struct ProbeResult {
     pub detail: Option<String>,
 }
 
+pub fn download_headers(cookies: &str, ctoken: &str) -> Value {
+    json!({
+        "Cookie": cookies,
+        "User-Agent": UA,
+        "Referer": "https://drive.uc.cn/",
+        "Origin": "https://drive.uc.cn",
+        "x-csrf-token": ctoken,
+    })
+}
+
 fn headers_of(cookies: &str, ctoken: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_static(UA));

@@ -56,6 +56,10 @@ impl ApiError {
         }
     }
 
+    pub fn from_db(err: rusqlite::Error) -> Self {
+        ApiError::internal(format!("数据库错误: {err}"))
+    }
+
     /// std::io::Error → 最近似的状态映射
     pub fn from_io(err: &std::io::Error) -> Self {
         let code = err.raw_os_error();

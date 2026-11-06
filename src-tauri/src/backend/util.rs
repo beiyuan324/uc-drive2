@@ -5,8 +5,16 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use percent_encoding::{percent_encode, AsciiSet, NON_ALPHANUMERIC};
+use serde_json::Value;
 
 use super::error::{ApiError, ApiResult};
+
+pub fn direct_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("reqwest client")
+}
 
 /// 当前时间 ISO 8601（毫秒 + Z），对标 new Date().toISOString()
 pub fn now_iso() -> String {
@@ -21,6 +29,14 @@ pub fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+pub fn value_i64(value: Option<&Value>) -> Option<i64> {
+    value.and_then(|v| match v {
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|v| v as i64)),
+        Value::String(s) => s.parse::<i64>().ok(),
+        _ => None,
+    })
+}
+
 /// 路径统一用正斜杠存储（Windows 下也如此），FS 操作前再还原
 pub fn norm_path(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
@@ -29,6 +45,18 @@ pub fn norm_path(p: &Path) -> String {
 /// 规范化字符串形式的路径（已含正斜杠）
 pub fn norm_str(p: &str) -> String {
     p.replace('\\', "/")
+}
+
+/// 将相对路径解析到当前工作目录。
+pub fn resolve_path(raw: &str) -> PathBuf {
+    let path = PathBuf::from(raw);
+    if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    }
 }
 
 /// 判断 target 是否位于 root 内（大小写不敏感，Windows 语义）。
@@ -57,6 +85,22 @@ pub fn assert_inside(root: &Path, target: &Path) -> ApiResult<()> {
         return Err(ApiError::bad_request("非法路径"));
     }
     Ok(())
+}
+
+fn is_cross_device(err: &std::io::Error) -> bool {
+    err.raw_os_error() == Some(17) || err.kind() == std::io::ErrorKind::CrossesDevices
+}
+
+/// 跨卷移动（跨卷时降级为复制+删除）。
+pub fn move_path(src: &Path, dest: &Path) -> std::io::Result<()> {
+    match std::fs::rename(src, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if is_cross_device(&err) => {
+            std::fs::copy(src, dest)?;
+            std::fs::remove_file(src)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// 若重名则追加 (1)、(2)…，返回可用且唯一的路径（对标 uniquePath）
