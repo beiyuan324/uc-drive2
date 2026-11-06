@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { api } from '@/api';
 import type { FileNode } from '@/types';
 
@@ -14,8 +14,6 @@ export const useFilesStore = defineStore('files', () => {
   const searchQuery = ref('');
   const searchResults = ref<FileNode[]>([]);
   const searching = ref(false);
-
-  const isEmpty = computed(() => !loading.value && items.value.length === 0);
 
   async function doSearch() {
     const q = searchQuery.value.trim();
@@ -98,7 +96,7 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   return {
-    currentDir, items, breadcrumbs, loading, error, uploading, isEmpty,
+    currentDir, items, breadcrumbs, loading, error, uploading,
     showUpload, searchQuery, searchResults, searching,
     refresh, enterDir, createDir, upload, rename, move, remove, doSearch, openSearchResult,
   };

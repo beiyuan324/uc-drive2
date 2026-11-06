@@ -3,16 +3,13 @@ import { computed, onActivated, ref } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import { NButton, NIcon, NEmpty, NSpin, NTable, NSpace, NTag, NTooltip, NInput } from 'naive-ui';
 import {
-  PhClock as ClockIcon,
   PhTrash as TrashIcon,
   PhArrowClockwise as RedownloadIcon,
   PhCopy as CopyIcon,
   PhCheck as CheckIcon,
-  PhLink as LinkIcon,
   PhMagnifyingGlass as SearchIcon,
-  PhCheckCircle as SuccessIcon,
 } from '@phosphor-icons/vue';
-import { api, formatSize } from '@/api';
+import { api } from '@/api';
 import FileIcon from '@/components/FileIcon.vue';
 import type { DrivePlatform, TaskItem } from '@/types';
 import { driveNames } from '@/types';

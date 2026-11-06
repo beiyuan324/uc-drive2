@@ -29,7 +29,6 @@ import {
   PhShieldCheck as ShieldIcon,
   PhInfo as InfoIcon,
   PhCopy as CopyIcon,
-  PhCheck as CheckIcon,
   PhSun as SunIcon,
   PhMoon as MoonIcon,
   PhMonitor as MonitorIcon,

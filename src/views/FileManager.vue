@@ -17,8 +17,6 @@ import {
   NTable,
 } from 'naive-ui';
 import {
-  PhArrowLeft as ArrowLeftIcon,
-  PhTrash as TrashIcon,
   PhUploadSimple as UploadIcon,
   PhGridFour as GridIcon,
   PhList as ListIcon,
@@ -26,11 +24,9 @@ import {
   PhDotsThreeVertical as MoreIcon,
   PhFolderPlus as FolderPlusIcon,
   PhHouse as HouseIcon,
-  PhPencilSimple as PencilIcon,
   PhFolderOpen as FolderOpenIcon,
   PhEye as EyeIcon,
   PhArrowSquareOut as RevealIcon,
-  PhArrowLineRight as MoveIcon,
   PhArrowClockwise as RefreshIcon,
   PhCaretRight as CaretRightIcon,
   PhCloudArrowUp as CloudArrowUpIcon,

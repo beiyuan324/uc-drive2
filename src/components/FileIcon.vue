@@ -3,7 +3,6 @@ import { computed } from 'vue';
 import { NIcon } from 'naive-ui';
 import {
   PhFolder as FolderGlyph,
-  PhFolderOpen as FolderOpenGlyph,
   PhFile as FileGlyph,
   PhImage as ImageGlyph,
   PhFilmSlate as FilmGlyph,
@@ -12,8 +11,6 @@ import {
   PhFileCode as CodeGlyph,
   PhFilePdf as PdfGlyph,
   PhFileText as TextGlyph,
-  PhFileVideo as VideoGlyph,
-  PhFileAudio as AudioGlyph,
   PhFileCsv as CsvGlyph,
   PhFileXls as XlsGlyph,
   PhFilePpt as PptGlyph,
