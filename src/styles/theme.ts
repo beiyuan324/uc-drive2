@@ -1,8 +1,8 @@
 import type { GlobalThemeOverrides } from 'naive-ui';
 import { darkTheme, dateZhCN, zhCN } from 'naive-ui';
 
-export const ACCENT = '#007AFF';
-export const ACCENT_HOVER = '#0066D6';
+export const ACCENT = '#047857';
+export const ACCENT_HOVER = '#065F46';
 const fontFamily =
   '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", "PingFang SC", "Microsoft YaHei", sans-serif';
 const controls: GlobalThemeOverrides = {
@@ -26,7 +26,7 @@ export const lightOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: ACCENT,
     primaryColorHover: ACCENT_HOVER,
-    primaryColorPressed: '#0055B3',
+    primaryColorPressed: '#064E3B',
     primaryColorSuppl: ACCENT,
     infoColor: '#007AFF',
     successColor: '#248A3D',
@@ -58,16 +58,16 @@ export const lightOverrides: GlobalThemeOverrides = {
 export const darkOverrides: GlobalThemeOverrides = {
   ...controls,
   common: {
-    primaryColor: '#409CFF',
-    primaryColorHover: '#70B5FF',
-    primaryColorPressed: '#0A84FF',
-    primaryColorSuppl: '#409CFF',
+    primaryColor: '#34D399',
+    primaryColorHover: '#6EE7B7',
+    primaryColorPressed: '#10B981',
+    primaryColorSuppl: '#34D399',
     infoColor: '#409CFF',
     successColor: '#59CF72',
     warningColor: '#F5BE4F',
     errorColor: '#FF6961',
-    bodyColor: '#1C1C1E',
-    cardColor: '#242426',
+    bodyColor: '#18181B',
+    cardColor: '#202023',
     modalColor: '#2C2C2E',
     popoverColor: '#2C2C2E',
     textColorBase: '#F5F5F7',
@@ -75,7 +75,7 @@ export const darkOverrides: GlobalThemeOverrides = {
     textColor2: '#C4C4C9',
     textColor3: '#A1A1A8',
     borderColor: '#38383C',
-    dividerColor: '#333336',
+    dividerColor: '#2D2D31',
     hoverColor: 'rgba(255,255,255,.045)',
     borderRadius: '7px',
     borderRadiusSmall: '5px',

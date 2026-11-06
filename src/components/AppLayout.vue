@@ -13,19 +13,15 @@ import {
   PhSun,
   PhMoon,
   PhMonitor,
-  PhCloud,
   PhCaretRight,
   PhSidebarSimple,
   PhX,
-  PhShieldCheck,
-  PhHardDrives,
   PhFile,
 } from '@phosphor-icons/vue';
 import { useSettingsStore } from '@/stores/settings';
 import { useFilesStore } from '@/stores/files';
 import { useTasksStore } from '@/stores/tasks';
 import type { ThemeMode } from '@/types';
-import { version } from '../../package.json';
 import WindowControls from './WindowControls.vue';
 
 const route = useRoute();
@@ -39,14 +35,11 @@ const activeTasksCount = computed(
   () => tasks.tasks.filter((t) => t.status === 'running' || t.status === 'queued').length,
 );
 const navigation = [
-  { label: '我的文件', key: '/files', icon: PhFolderSimple, group: '资料库' },
-  { label: '离线下载', key: '/downloads', icon: PhDownloadSimple, group: '传输' },
+  { label: '我的文件', key: '/files', icon: PhFolderSimple },
+  { label: '离线下载', key: '/downloads', icon: PhDownloadSimple },
   { label: '链接解析', key: '/parse', icon: PhLinkSimple },
   { label: '历史记录', key: '/history', icon: PhClockCounterClockwise },
 ];
-const pageTitle = computed(
-  () => navigation.find((item) => item.key === route.path)?.label || '设置',
-);
 const themeOptions = [
   { label: '浅色外观', key: 'light', icon: () => h(PhSun) },
   { label: '深色外观', key: 'dark', icon: () => h(PhMoon) },
@@ -93,51 +86,34 @@ onUnmounted(() => {
       @click="sidebarOpen = false"
     />
     <aside class="app-sider" :class="{ 'is-open': sidebarOpen }" aria-label="主导航">
-      <button class="brand" @click="navigate('/files')">
+      <button class="brand" aria-label="folder-drive，打开我的文件" @click="navigate('/files')">
         <img class="brand-mark" src="@/assets/app-icon.png" alt="" />
-        <span class="brand-info"
-          ><strong><span class="brand-name">folder</span>-drive</strong
-          ><span>你的个人文件空间</span></span
-        >
+        <strong>folder-drive</strong>
       </button>
       <nav class="sidebar-nav">
-        <template v-for="item in navigation" :key="item.key">
-          <div v-if="item.group" class="nav-section-label">{{ item.group }}</div>
-          <button
-            class="nav-item"
-            :class="{ active: route.path === item.key }"
-            :aria-current="route.path === item.key ? 'page' : undefined"
-            @click="navigate(item.key)"
-          >
-            <n-icon :component="item.icon" :size="19" /><span>{{ item.label }}</span>
-            <span v-if="item.key === '/downloads' && activeTasksCount" class="nav-count">{{
-              activeTasksCount
-            }}</span>
-          </button>
-        </template>
+        <button
+          v-for="item in navigation"
+          :key="item.key"
+          class="nav-item"
+          :class="{ active: route.path === item.key }"
+          :aria-current="route.path === item.key ? 'page' : undefined"
+          @click="navigate(item.key)"
+        >
+          <n-icon :component="item.icon" :size="19" /><span>{{ item.label }}</span>
+          <span v-if="item.key === '/downloads' && activeTasksCount" class="nav-count">{{
+            activeTasksCount
+          }}</span>
+        </button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="local-space">
-          <div class="local-space-icon"><n-icon :component="PhHardDrives" :size="22" /></div>
-          <div>
-            <strong>本地空间</strong
-            ><span>{{ settings.info ? '文件保存在这台电脑' : '正在连接本地服务' }}</span>
-          </div>
-          <span class="connection-dot" :class="{ connected: settings.info }" />
-        </div>
-        <div class="sidebar-divider" />
         <button
           class="nav-item"
           :class="{ active: route.path === '/settings' }"
           :aria-current="route.path === '/settings' ? 'page' : undefined"
           @click="navigate('/settings')"
         >
-          <n-icon :component="PhGearSix" :size="19" /><span>设置</span
-          ><n-icon class="nav-chevron" :component="PhCaretRight" :size="12" />
+          <n-icon :component="PhGearSix" :size="19" /><span>设置</span>
         </button>
-        <div class="sidebar-footnote">
-          <n-icon :component="PhShieldCheck" :size="13" /><span>私密存储，尽在本机</span>
-        </div>
       </div>
     </aside>
     <div class="app-main">
@@ -157,7 +133,6 @@ onUnmounted(() => {
                     :size="20" /></template></n-button></template
             >切换导航</n-tooltip
           >
-          <span class="header-location-name" data-tauri-drag-region>{{ pageTitle }}</span>
         </div>
         <div class="header-right">
           <n-popover
@@ -172,6 +147,7 @@ onUnmounted(() => {
                 v-model:value="files.searchQuery"
                 class="search-input"
                 placeholder="搜索文件"
+                :input-props="{ 'aria-label': '搜索文件' }"
                 clearable
                 ><template #prefix
                   ><n-icon :component="PhMagnifyingGlass" :size="16" /></template></n-input
@@ -196,7 +172,6 @@ onUnmounted(() => {
               </button>
             </div>
           </n-popover>
-          <span class="header-divider" />
           <n-dropdown
             trigger="click"
             :options="themeOptions"
@@ -227,10 +202,6 @@ onUnmounted(() => {
             ><keep-alive><component :is="Component" /></keep-alive></transition
         ></router-view>
       </main>
-      <footer class="app-statusbar">
-        <span><n-icon :component="PhCloud" :size="14" />个人空间</span
-        ><span>folder-drive <span class="status-version">{{ version }}</span></span>
-      </footer>
     </div>
   </div>
 </template>
@@ -243,19 +214,20 @@ onUnmounted(() => {
   background: var(--surface);
 }
 .app-sider {
-  width: 232px;
+  width: 208px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--sidebar);
   border-right: 1px solid var(--line);
-  padding: 0 14px;
+  padding: 0 12px;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 30px 12px 34px;
+  gap: 10px;
+  min-height: 72px;
+  padding: 16px 10px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -263,146 +235,59 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .brand-mark {
-  width: 38px;
-  height: 38px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 7px;
 }
-.brand-info {
+.brand strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-}
-.brand-info strong {
-  font-size: 20px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-.brand-name {
-  color: var(--accent);
-}
-.brand-info > span {
-  color: var(--zinc-500);
-  font-size: 10px;
-}
-.nav-section-label {
-  color: var(--zinc-500);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 0 13px 9px;
-}
-.nav-section-label:not(:first-child) {
-  padding-top: 27px;
+  gap: 4px;
 }
 .nav-item {
-  position: relative;
   width: 100%;
-  height: 38px;
+  min-height: 38px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 0 12px;
-  margin-bottom: 3px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
   color: var(--zinc-700);
-  font: inherit;
   font-size: 13px;
   cursor: pointer;
   text-align: left;
-  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background 150ms ease, color 150ms ease;
 }
 .nav-item > .n-icon {
   color: var(--zinc-500);
-  transition: color 150ms;
 }
 .nav-item:hover {
   background: var(--hover);
   color: var(--zinc-900);
 }
-.nav-item:hover > .n-icon {
-  color: var(--zinc-800);
-}
 .nav-item.active {
-  background: var(--card-bg);
+  background: var(--selection);
   color: var(--accent);
   font-weight: 600;
-  border-color: var(--card-border);
-  box-shadow: var(--shadow-sm);
 }
 .nav-item.active > .n-icon {
-  color: var(--accent);
-}
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  background: var(--accent);
-  border-radius: 0 3px 3px 0;
+  color: inherit;
 }
 .nav-count {
   margin-left: auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-}
-.nav-chevron {
-  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .sidebar-bottom {
   margin-top: auto;
-  padding: 24px 0 16px;
-}
-.local-space {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 10px 20px;
-}
-.local-space-icon {
-  color: var(--zinc-500);
-}
-.local-space strong,
-.local-space span {
-  display: block;
-}
-.local-space strong {
-  font-size: 12px;
-  font-weight: 550;
-}
-.local-space div > span {
-  font-size: 10px;
-  margin-top: 4px;
-  color: var(--zinc-500);
-}
-.connection-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--zinc-400);
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.connection-dot.connected {
-  background: #34c759;
-}
-.sidebar-divider {
-  height: 1px;
-  background: var(--line);
-  margin: 0 9px 14px;
-}
-.sidebar-footnote {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 19px;
-  color: var(--zinc-500);
-  font-size: 10px;
+  padding: 16px 0;
 }
 .app-main {
   flex: 1;
@@ -411,49 +296,27 @@ onUnmounted(() => {
   flex-direction: column;
 }
 .app-header {
-  height: 70px;
+  height: 52px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 36px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-glass);
-  backdrop-filter: blur(20px);
+  background: var(--surface);
   user-select: none;
 }
 .header-location,
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
-}
-.header-location-name {
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--zinc-600);
-  white-space: nowrap;
 }
 .search-input {
   width: 240px;
-  --n-color: var(--zinc-100) !important;
-  --n-border: 1px solid var(--zinc-200) !important;
-  --n-border-hover: 1px solid var(--accent) !important;
-  --n-border-focus: 1px solid var(--accent) !important;
-  --n-height: 32px !important;
-  --n-border-radius: 8px !important;
-  font-size: 12px;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.search-input:focus-within {
-  width: 280px;
-}
-.header-divider {
-  height: 18px;
-  width: 1px;
-  background: var(--line);
+  font-size: 13px;
 }
 .sidebar-toggle {
   display: none;
@@ -461,26 +324,7 @@ onUnmounted(() => {
 .app-content {
   flex: 1;
   overflow: auto;
-  padding: 34px 36px 24px;
-}
-.app-statusbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 34px;
-  padding: 0 36px;
-  border-top: 1px solid var(--line);
-  color: var(--zinc-500);
-  font-size: 10px;
-  flex-shrink: 0;
-}
-.app-statusbar > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.status-version {
-  color: var(--zinc-400);
+  padding: 24px;
 }
 .search-panel {
   width: min(320px, 75vw);
@@ -516,38 +360,26 @@ onUnmounted(() => {
 }
 @media (min-width: 1600px) {
   .app-content {
-    padding: 40px 48px 24px;
+    padding: 32px;
   }
-  .app-header,
-  .app-statusbar {
-    padding-left: 48px;
-    padding-right: 48px;
+  .app-header {
+    padding: 0 32px;
   }
 }
 @media (max-width: 900px) {
   .app-sider {
-    width: 205px;
-  }
-  .app-content {
-    padding: 26px 24px;
-  }
-  .app-header,
-  .app-statusbar {
-    padding-left: 24px;
-    padding-right: 24px;
+    width: 184px;
   }
 }
 @media (max-width: 680px) {
   .app-sider {
     position: fixed;
     inset: 0 auto 0 0;
-    width: 232px;
+    width: 208px;
     z-index: 102;
     visibility: hidden;
     transform: translateX(-100%);
-    transition:
-      transform 180ms ease,
-      visibility 180ms;
+    transition: transform 180ms ease, visibility 180ms;
   }
   .app-sider.is-open {
     visibility: visible;
@@ -560,31 +392,23 @@ onUnmounted(() => {
     background: rgba(0, 0, 0, 0.25);
     border: 0;
     z-index: 101;
-    backdrop-filter: blur(3px);
   }
   .sidebar-toggle {
     display: inline-flex;
   }
   .app-header {
-    height: 58px;
-    padding: 0 16px;
+    padding: 0 12px;
     gap: 8px;
   }
   .header-location,
   .header-right {
-    gap: 8px;
-  }
-  .header-location-name {
-    display: none;
+    gap: 4px;
   }
   .search-input {
-    width: min(230px, 58vw);
+    width: clamp(72px, calc(100vw - 248px), 240px);
   }
   .app-content {
-    padding: 24px 18px 18px;
-  }
-  .app-statusbar {
-    padding: 0 18px;
+    padding: 20px 16px;
   }
 }
 </style>
