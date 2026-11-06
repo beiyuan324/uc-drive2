@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::error::{ApiError, ApiResult};
 
 pub fn direct_client() -> reqwest::Client {
-    reqwest::Client::builder()
+    super::http_client_builder()
         .no_proxy()
         .build()
         .expect("reqwest client")
@@ -18,7 +18,45 @@ pub fn direct_client() -> reqwest::Client {
 
 /// 当前时间 ISO 8601（毫秒 + Z），对标 new Date().toISOString()
 pub fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    format_iso(time::OffsetDateTime::now_utc())
+}
+
+fn format_iso(date: time::OffsetDateTime) -> String {
+    let date = date.to_offset(time::UtcOffset::UTC);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        date.year(),
+        u8::from(date.month()),
+        date.day(),
+        date.hour(),
+        date.minute(),
+        date.second(),
+        date.millisecond(),
+    )
+}
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::format_iso;
+    use time::OffsetDateTime;
+
+    #[test]
+    fn preserves_utc_milliseconds_at_calendar_boundaries() {
+        for (millis, expected) in [
+            (0i128, "1970-01-01T00:00:00.000Z"),
+            (-1, "1969-12-31T23:59:59.999Z"),
+            (951_827_696_123, "2000-02-29T12:34:56.123Z"),
+            (4_107_542_400_000, "2100-03-01T00:00:00.000Z"),
+            (-2_203_891_200_000, "1900-03-01T00:00:00.000Z"),
+        ] {
+            let date = OffsetDateTime::from_unix_timestamp_nanos(millis * 1_000_000 + 456_789).unwrap();
+            assert_eq!(format_iso(date), expected);
+            assert_eq!(
+                format_iso(date.to_offset(time::UtcOffset::from_hms(8, 0, 0).unwrap())),
+                expected,
+            );
+        }
+    }
 }
 
 /// 当前毫秒时间戳

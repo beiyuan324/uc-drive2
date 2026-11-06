@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use rand_core::{OsRng, RngCore};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
@@ -410,7 +411,7 @@ impl TaskService {
             return Err(ApiError::internal("链接不合法"));
         }
 
-        let random = rand::Rng::gen_range(&mut rand::thread_rng(), 0..1000u32);
+        let random = OsRng.next_u64();
         let temp_dir = offline.join(format!("task-{}-{}", now_ms(), random));
         std::fs::create_dir_all(&temp_dir).map_err(|e| ApiError::from_io(&e))?;
         let (id, final_dir) = {

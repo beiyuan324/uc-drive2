@@ -123,8 +123,8 @@ impl GopeedManager {
     ) -> Arc<Self> {
         let (events, _) = broadcast::channel(32);
         let mut bytes = [0u8; 16];
-        use rand::RngCore;
-        rand::thread_rng().fill_bytes(&mut bytes);
+        use rand_core::{OsRng, RngCore};
+        OsRng.fill_bytes(&mut bytes);
         let token = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
         Arc::new(GopeedManager {
             exe_path,

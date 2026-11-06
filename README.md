@@ -63,6 +63,8 @@ npm run dev:backend
 
 如只使用 Tauri 窗口，运行 `npx tauri dev` 即可；Tauri 主进程会自行启动 Rust 后端。
 
+开发进程管理测试运行 `npm test`；时间与凭据兼容性测试运行 `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib --test dependency_replacements`；网盘接口与真实下载集成测试运行 `npm run test:cloud`。
+
 ## 网盘分享下载
 
 1. 在设置中保存对应网盘凭据。夸克、百度填写官网登录请求的 Cookie；UC 填写 UC 网页版请求头中的 Cookie。

@@ -34,6 +34,12 @@ use gopeed::{GopeedManager, GopeedSpawner};
 use tasks::TaskService;
 use util::{direct_client, resolve_path};
 
+// 与更新器共用 Ring；已初始化时保留现有提供者，避免依赖更新器的启动顺序。
+pub fn http_client_builder() -> reqwest::ClientBuilder {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::builder()
+}
+
 pub const BASE_PORT: u16 = 17210;
 const PORT_TRIES: u16 = 20;
 
