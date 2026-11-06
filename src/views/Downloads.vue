@@ -30,7 +30,6 @@ import {
   PhKey as KeyIcon,
   PhHourglass as HourglassIcon,
   PhArrowDown as ArrowDownIcon,
-  PhCheck as CheckMarkIcon,
 } from '@phosphor-icons/vue';
 import { useTasksStore } from '@/stores/tasks';
 import { useSettingsStore } from '@/stores/settings';
@@ -209,16 +208,6 @@ function taskTitle(t: TaskItem): string {
   return clean || `任务 ${t.id}`;
 }
 
-function taskLink(t: TaskItem): string | null {
-  if (t.source === 'uc') return 'UC 直链解析下载';
-  if (t.source === 'quark') return '夸克官方直链下载';
-  if (t.source === 'baidu') return '百度官方直链下载';
-  if (t.source === 'xunlei') return '迅雷官方直链下载';
-  if (t.source === 'magnet') return t.source_url?.slice(0, 60) || null;
-  if (t.source === 'torrent') return null;
-  return t.source_url || null;
-}
-
 function taskTotal(t: TaskItem): number {
   const uc = (t.metadata?.uc || t.metadata?.cloud || {}) as Record<string, unknown>;
   if (typeof uc.size === 'number' && uc.size > 0) return uc.size;
@@ -268,37 +257,25 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 <template>
   <div class="downloads-page">
     <div class="page-head">
-      <div>
-        <h2 class="page-title">离线下载</h2>
-        <p class="page-desc">每一次传输，都有条不紊。</p>
-      </div>
-      <n-button type="primary" @click="showNew = true">
-        <template #icon><n-icon :component="PlusIcon" /></template>
-        新建任务
-      </n-button>
-    </div>
-
-    <div class="transfer-overview">
-      <div>
-        <span class="overview-label">正在传输</span
-        ><strong class="tabular-nums">{{ runningTasks.length }}<small>个任务</small></strong>
-      </div>
-      <div>
-        <span class="overview-label">总下载速度</span
-        ><strong class="tabular-nums">{{ totalSpeed ? formatSpeed(totalSpeed) : '0 KB/s' }}</strong>
-      </div>
-      <div>
-        <span class="overview-label">已完成</span
-        ><strong class="tabular-nums">{{ doneTasks.length }}<small>个任务</small></strong>
+      <h1 class="page-title">离线下载</h1>
+      <div class="page-actions">
+        <span v-if="runningTasks.length" class="transfer-speed tabular-nums" aria-label="总下载速度" title="总下载速度">
+          {{ totalSpeed ? formatSpeed(totalSpeed) : '0 KB/s' }}
+        </span>
+        <n-button type="primary" @click="showNew = true">
+          <template #icon><n-icon :component="PlusIcon" /></template>
+          新建任务
+        </n-button>
       </div>
     </div>
 
     <!-- 任务过滤分段栏与快捷操作 -->
     <div class="filter-bar">
-      <div class="filter-tabs">
+      <div class="filter-tabs" role="group" aria-label="下载状态">
         <button
           class="filter-tab"
           :class="{ active: currentTab === 'all' }"
+          :aria-pressed="currentTab === 'all'"
           @click="currentTab = 'all'"
         >
           全部 <span class="tab-count tabular-nums">{{ tasks.tasks.length }}</span>
@@ -306,6 +283,7 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
         <button
           class="filter-tab"
           :class="{ active: currentTab === 'running' }"
+          :aria-pressed="currentTab === 'running'"
           @click="currentTab = 'running'"
         >
           下载中 <span class="tab-count tabular-nums">{{ runningTasks.length }}</span>
@@ -313,6 +291,7 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
         <button
           class="filter-tab"
           :class="{ active: currentTab === 'done' }"
+          :aria-pressed="currentTab === 'done'"
           @click="currentTab = 'done'"
         >
           已完成 <span class="tab-count tabular-nums">{{ doneTasks.length }}</span>
@@ -320,15 +299,16 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
         <button
           class="filter-tab"
           :class="{ active: currentTab === 'error' }"
+          :aria-pressed="currentTab === 'error'"
           @click="currentTab = 'error'"
         >
-          异常/失败 <span class="tab-count tabular-nums">{{ errorTasks.length }}</span>
+          失败 <span class="tab-count tabular-nums">{{ errorTasks.length }}</span>
         </button>
       </div>
       <div class="filter-actions">
         <n-button v-if="doneTasks.length > 0" size="small" quaternary @click="clearCompleted">
           <template #icon><n-icon :component="TrashIcon" /></template>
-          清空已完成 ({{ doneTasks.length }})
+          清空已完成
         </n-button>
       </div>
     </div>
@@ -349,17 +329,11 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
           <template #icon
             ><n-icon :component="ArrowDownIcon" size="48" color="var(--zinc-300)"
           /></template>
-          <template #extra v-if="currentTab === 'all'">
-            <n-button type="primary" secondary size="small" @click="showNew = true">
-              <template #icon><n-icon :component="PlusIcon" /></template>
-              创建第一个任务
-            </n-button>
-          </template>
         </n-empty>
       </div>
 
       <div v-else class="task-list">
-        <div v-for="t in filteredTasks" :key="t.id" class="task-item hover-lift">
+        <div v-for="t in filteredTasks" :key="t.id" class="task-item">
           <div class="task-icon" :class="`icon-${t.status}`">
             <n-icon
               :component="statusMeta[t.status]?.icon || ClockIcon"
@@ -376,16 +350,8 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
             />
           </div>
           <div class="task-main">
-            <div class="task-header-row">
-              <div class="task-name" :title="t.source_url || `任务 #${t.id}`">
-                {{ taskTitle(t) }}
-              </div>
-              <span class="task-source-badge">{{
-                t.source === 'torrent' ? 'torrent' : t.source
-              }}</span>
-            </div>
-            <div v-if="taskLink(t)" class="task-link" :title="t.source_url || ''">
-              {{ taskLink(t) }}
+            <div class="task-name" :title="t.source_url || `任务 #${t.id}`">
+              {{ taskTitle(t) }}
             </div>
 
             <!-- 详细状态与速度信息 -->
@@ -398,12 +364,8 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
                 正在合并收尾 · 剩余约 {{ taskRemaining(t) }}
               </span>
               <span v-else-if="t.status === 'running'" class="task-speed-box">
-                <span class="pulse-dot" style="margin-right: 4px"></span>
                 <span class="task-speed tabular-nums">{{ formatSpeed(t.speed) }}</span>
                 <span v-if="taskEta(t)" class="task-eta tabular-nums">· 约剩 {{ taskEta(t) }}</span>
-              </span>
-              <span v-else-if="t.status === 'queued'" class="task-queue-hint">
-                队列中等待，最多同时并发 {{ settings.downloadConfig.maxRunning }} 个
               </span>
             </div>
 
@@ -411,10 +373,10 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
             <div v-if="t.status === 'cookie_expired'" class="cookie-expired-banner">
               <div class="cookie-banner-text">
                 <n-icon :component="KeyIcon" size="15" color="#d97706" />
-                <span>UC Cookie 已失效，无法自动换取直链</span>
+                <span>UC 登录已失效</span>
               </div>
               <n-button size="tiny" type="warning" secondary @click="goToSettings"
-                >前往设置更新</n-button
+                >更新凭据</n-button
               >
             </div>
 
@@ -441,12 +403,8 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
                 "
               />
             </template>
-            <div v-else class="task-done-hint">
-              <n-icon :component="CheckMarkIcon" size="14" />
-              <span>已完整下载并登记至网盘根目录</span>
-              <span v-if="taskTotal(t) > 0" class="done-size tabular-nums"
-                >（{{ formatSize(taskTotal(t)) }}）</span
-              >
+            <div v-else-if="taskTotal(t) > 0" class="done-size tabular-nums">
+              {{ formatSize(taskTotal(t)) }}
             </div>
           </div>
 
@@ -494,7 +452,7 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
     <n-modal
       v-model:show="showNew"
       preset="card"
-      title="新建离线下载任务"
+      title="新建任务"
       :style="{ width: '520px' }"
     >
       <div class="source-segmented">
@@ -516,26 +474,21 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
           v-model:value="url"
           :placeholder="
             source === 'url'
-              ? '输入或粘贴下载链接，如 https://example.com/file.zip'
-              : '输入或粘贴 magnet:?xt=urn:btih: 磁力链接'
+              ? '粘贴 HTTP / HTTPS 下载链接'
+              : '粘贴 magnet: 磁力链接'
           "
           class="source-input"
+          :input-props="{ 'aria-label': source === 'url' ? '下载链接' : '磁力链接' }"
           autofocus
           @keydown.enter="confirmCreate"
         />
-        <p class="source-tip">
-          {{
-            source === 'url'
-              ? '支持标准 HTTP / HTTPS 协议直链下载'
-              : '磁力下载依赖可用 Peer 与 Tracker 节点网络质量'
-          }}
-        </p>
       </template>
 
       <template v-else>
         <label class="torrent-picker" :class="{ active: torrentFile }">
           <input
             type="file"
+            aria-label="选择种子文件"
             accept=".torrent"
             class="torrent-input"
             @change="
@@ -551,7 +504,7 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
           </template>
           <template v-else>
             <n-icon :component="TorrentIcon" size="32" />
-            <span class="torrent-hint">点击选择或将 .torrent 种子文件拖拽至此</span>
+            <span class="torrent-hint">选择种子文件</span>
           </template>
         </label>
       </template>
@@ -567,42 +520,14 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 </template>
 
 <style scoped>
-.transfer-overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.transfer-overview > div {
+.page-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  padding: 16px 20px;
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  align-items: center;
+  gap: 16px;
 }
-.transfer-overview > div:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--zinc-200));
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-.overview-label {
-  font-size: 11px;
+.transfer-speed {
   color: var(--zinc-500);
-}
-.transfer-overview strong {
-  font-size: 25px;
-  line-height: 1.3;
-  font-weight: 550;
-}
-.transfer-overview small {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--zinc-500);
-  margin-left: 8px;
+  font-size: 13px;
 }
 .filter-bar {
   display: flex;
@@ -615,11 +540,9 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 .filter-tabs {
   display: inline-flex;
   align-items: center;
-  background: var(--zinc-100);
-  padding: 3px;
-  border-radius: var(--radius-control);
-  gap: 2px;
-  border: 1px solid var(--zinc-200);
+  gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .filter-tab {
   display: inline-flex;
@@ -633,53 +556,34 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
   cursor: pointer;
   padding: 5px 12px;
   border-radius: 6px;
-  transition: all 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .filter-tab:hover {
   color: var(--zinc-900);
 }
 .filter-tab.active {
-  background: var(--zinc-50);
-  color: var(--zinc-900);
+  background: var(--selection);
+  color: var(--accent);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .tab-count {
   font-size: 11px;
-  color: var(--zinc-400);
-  background: var(--zinc-200);
-  padding: 1px 5px;
-  border-radius: 10px;
+  color: var(--zinc-500);
   line-height: 1.2;
 }
 .filter-tab.active .tab-count {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
-}
-.empty-box {
-  padding: 70px 0;
+  color: inherit;
 }
 .task-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 .task-item {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  padding: 16px 18px;
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-  box-shadow: var(--shadow-sm);
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.task-item:hover {
-  background: var(--card-bg);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--zinc-300));
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
 }
 .task-icon {
   flex-shrink: 0;
@@ -715,38 +619,12 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
   flex: 1;
   min-width: 0;
 }
-.task-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
 .task-name {
   font-size: 14px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.task-source-badge {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--zinc-500);
-  background: var(--zinc-200);
-  padding: 1px 6px;
-  border-radius: 4px;
-  letter-spacing: 0;
-  flex-shrink: 0;
-}
-.task-link {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--zinc-400);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 580px;
 }
 .task-sub {
   display: flex;
@@ -777,9 +655,6 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
   gap: 4px;
   color: var(--accent);
   font-weight: 500;
-}
-.task-queue-hint {
-  color: var(--zinc-400);
 }
 .cookie-expired-banner {
   display: flex;
@@ -816,18 +691,10 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 .task-progress {
   margin-top: 4px;
 }
-.task-done-hint {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.done-size {
   margin-top: 8px;
   font-size: 12px;
-  color: var(--success);
-  font-weight: 500;
-}
-.done-size {
-  color: var(--zinc-400);
-  font-weight: 400;
+  color: var(--zinc-500);
 }
 .task-actions {
   display: flex;
@@ -856,12 +723,8 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
 .source-input {
   margin-bottom: 8px;
 }
-.source-tip {
-  margin: 0;
-  font-size: 12px;
-  color: var(--zinc-500);
-}
 .torrent-picker {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -900,22 +763,44 @@ watch(() => tasks.tasks, checkCompleted, { deep: true });
   font-size: 13px;
 }
 .torrent-input {
-  display: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.torrent-picker:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 @media (max-width: 680px) {
-  .transfer-overview {
-    gap: 8px;
-    padding-bottom: 24px;
+  .page-actions {
+    gap: 12px;
   }
-  .transfer-overview > div + div {
-    padding-left: 12px;
+  .filter-tab {
+    padding: 6px 8px;
+    white-space: nowrap;
+    font-size: 12px;
   }
-  .transfer-overview strong {
-    font-size: 18px;
+  .task-item {
+    gap: 10px;
+    padding: 18px 0;
   }
-  .transfer-overview small {
-    display: block;
-    margin: 4px 0 0;
+  .task-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .task-actions {
+    gap: 0;
+    flex-direction: column;
+  }
+  .cookie-expired-banner {
+    flex-wrap: wrap;
+  }
+  .source-group :deep(.n-radio-button) {
+    padding: 0 6px;
+    font-size: 12px;
   }
 }
 </style>

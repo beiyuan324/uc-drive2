@@ -2,9 +2,9 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage, useDialog, NButton, NIcon, NInput, NAlert, NEmpty, NSpin, NTable,
-  NSpace, NBreadcrumb, NBreadcrumbItem, NTooltip, NTag, NCheckbox } from 'naive-ui';
-import { PhLink as LinkIcon, PhPlay as ParseIcon, PhDownloadSimple as DownloadIcon,
-  PhInfo as InfoIcon, PhFolderOpen as FolderOpenIcon } from '@phosphor-icons/vue';
+  NSpace, NBreadcrumb, NBreadcrumbItem, NCheckbox } from 'naive-ui';
+import { PhPlay as ParseIcon, PhDownloadSimple as DownloadIcon,
+  PhFolderOpen as FolderOpenIcon } from '@phosphor-icons/vue';
 import { api, formatSize } from '@/api';
 import { useSettingsStore } from '@/stores/settings';
 import { driveNames } from '@/types';
@@ -224,22 +224,16 @@ function clearAll() {
 <template>
   <div class="parse-view">
     <div class="page-head">
-      <div>
-        <h2 class="page-title">链接解析</h2>
-        <p class="page-desc">从一条分享链接，连接你的文件。</p>
-      </div>
+      <h1 class="page-title">链接解析</h1>
     </div>
 
     <div class="panel">
-      <div class="panel-title">
-        <n-icon :component="LinkIcon" size="18" />
-        <span>UC / 夸克 / 百度 / 迅雷分享链接</span>
-      </div>
       <n-input
         v-model:value="shareText"
         type="textarea"
         :rows="3"
-        placeholder="粘贴官方分享链接，每行一个，可包含提取码；支持混合批量解析"
+        placeholder="UC / 夸克 / 百度 / 迅雷分享链接，每行一个"
+        :input-props="{ 'aria-label': '分享链接和提取码' }"
       />
       <n-space class="parse-actions" :size="10">
         <n-button type="primary" :loading="parsing" @click="parseAll">
@@ -257,29 +251,28 @@ function clearAll() {
         class="cookie-tip"
       >
         <div class="cookie-tip-content">
-          <span>此分享未使用已保存的登录凭据，下载时可能需要先配置。</span>
+          <span>此分享未使用登录凭据</span>
           <n-button text type="warning" @click="router.push('/settings')"
-            >前往「设置 → 网盘凭据」配置 &rarr;</n-button
+            >设置凭据</n-button
           >
         </div>
       </n-alert>
     </div>
 
-    <n-alert v-if="active?.platform === 'xunlei'" type="info" :show-icon="false">迅雷普通分享无直链时，会按官方流程转存到本人云盘根目录后取链；转存文件会保留。</n-alert>
+    <n-alert v-if="active?.platform === 'xunlei'" type="info" :show-icon="false">迅雷分享可能先转存到你的云盘，转存文件会保留。</n-alert>
 
-    <div v-if="parsed.length > 0" class="links-bar">
-      <span class="links-bar-label">已解析分享：</span>
-      <n-tag
+    <div v-if="parsed.length > 1" class="links-bar" role="group" aria-label="切换分享">
+      <button
         v-for="(p, i) in parsed"
         :key="p.shareId + i"
-        :type="i === activeIdx ? 'primary' : 'default'"
-        size="small"
-        class="link-tag"
+        class="link-tab"
+        :class="{ active: i === activeIdx }"
+        :aria-pressed="i === activeIdx"
         :title="p.shareLink"
         @click="switchLink(i)"
       >
-        {{ driveNames[p.platform] }} · 分享 {{ i + 1 }}
-      </n-tag>
+        {{ driveNames[p.platform] }} · {{ i + 1 }}
+      </button>
     </div>
 
     <div v-if="hasResult" class="panel">
@@ -321,6 +314,7 @@ function clearAll() {
           <tr>
             <th style="width: 44px; text-align: center">
               <n-checkbox
+                aria-label="选择全部文件"
                 :checked="isAllSelected"
                 :indeterminate="isIndeterminate"
                 :disabled="currentFileItems.length === 0"
@@ -341,12 +335,17 @@ function clearAll() {
             <td style="text-align: center">
               <n-checkbox
                 v-if="f.file"
+                :aria-label="`选择 ${f.name}`"
                 :checked="selectedFids.has(f.fid)"
                 @update:checked="toggleSelect(f.fid)"
               />
             </td>
             <td>
-              <div class="file-cell" @click="f.file ? toggleSelect(f.fid) : enterFolder(f)">
+              <button
+                class="file-cell"
+                :aria-pressed="f.file ? selectedFids.has(f.fid) : undefined"
+                @click="f.file ? toggleSelect(f.fid) : enterFolder(f)"
+              >
                 <file-icon
                   :name="f.name"
                   :is-dir="!f.file"
@@ -354,54 +353,33 @@ function clearAll() {
                   :size="19"
                 />
                 <span class="file-name" :title="f.name">{{ f.name }}</span>
-              </div>
+              </button>
             </td>
             <td class="muted tabular-nums" style="text-align: right">
               {{ f.file ? formatSize(f.size) : '—' }}
             </td>
             <td style="text-align: right">
               <n-space size="small" justify="end" align="center">
-                <template v-if="f.file">
-                  <n-tooltip trigger="hover">
-                    <template #trigger>
-                      <n-button
-                        size="tiny"
-                        type="primary"
-                        secondary
-                        :loading="pendingFids.has(pendingKey(active, f.fid))"
-                        @click="downloadOne(f)"
-                      >
-                        <template #icon
-                          ><n-icon><download-icon /></n-icon
-                        ></template>
-                        下载
-                      </n-button>
-                    </template>
-                    创建下载任务
-                  </n-tooltip>
-                </template>
-                <template v-else>
-                  <n-tooltip trigger="hover">
-                    <template #trigger>
-                      <n-button size="tiny" secondary @click="enterFolder(f)">
-                        <template #icon
-                          ><n-icon><folder-open-icon /></n-icon
-                        ></template>
-                        进入
-                      </n-button>
-                    </template>
-                    打开文件夹
-                  </n-tooltip>
-                </template>
+                <n-button
+                  v-if="f.file"
+                  size="tiny"
+                  type="primary"
+                  secondary
+                  :loading="pendingFids.has(pendingKey(active, f.fid))"
+                  @click="downloadOne(f)"
+                >
+                  <template #icon><n-icon :component="DownloadIcon" /></template>
+                  下载
+                </n-button>
+                <n-button v-else size="tiny" secondary @click="enterFolder(f)">
+                  <template #icon><n-icon :component="FolderOpenIcon" /></template>
+                  打开
+                </n-button>
               </n-space>
             </td>
           </tr>
         </tbody>
       </n-table>
-      <div class="results-foot muted">
-        <n-icon :component="InfoIcon" size="14" />
-        <span>仅请求各网盘官方接口，统一使用 Gopeed 下载；凭据失效请在设置中更新后重新解析。</span>
-      </div>
     </div>
   </div>
 </template>
@@ -410,22 +388,16 @@ function clearAll() {
 .parse-view {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
+}
+.page-head {
+  margin-bottom: 0;
 }
 .panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-card);
-  padding: 18px 20px;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.panel:hover {
-  box-shadow: var(--shadow-md);
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--card-border));
+  background: transparent;
 }
 .uc-table {
   background: transparent !important;
@@ -442,13 +414,6 @@ function clearAll() {
 }
 .uc-table :deep(tr:not(.row-checked):hover td) {
   background: var(--hover) !important;
-}
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 15px;
 }
 .parse-actions {
   margin-top: 2px;
@@ -468,17 +433,21 @@ function clearAll() {
   flex-wrap: wrap;
   gap: 8px;
 }
-.links-bar-label {
-  font-size: 12px;
-  color: var(--zinc-500);
-  margin-right: 2px;
-}
-.link-tag {
+.link-tab {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zinc-600);
+  font-size: 13px;
   cursor: pointer;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.link-tab:hover {
+  background: var(--hover);
+}
+.link-tab.active {
+  background: var(--selection);
+  color: var(--accent);
 }
 .results-header {
   display: flex;
@@ -500,10 +469,13 @@ function clearAll() {
   justify-content: center;
   padding: 30px 0;
 }
-.empty-box {
-  padding: 40px 0;
-}
 .file-cell {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -526,10 +498,22 @@ function clearAll() {
 .uc-table :deep(td) {
   padding: 8px 12px;
 }
-.results-foot {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
+@media (max-width: 680px) {
+  .uc-table :deep(th:first-child) {
+    width: 32px !important;
+  }
+  .uc-table :deep(th:nth-child(2)) {
+    width: auto !important;
+  }
+  .uc-table :deep(th:nth-child(3)),
+  .uc-table :deep(td:nth-child(3)) {
+    display: none;
+  }
+  .uc-table :deep(th:last-child) {
+    width: 80px !important;
+  }
+  .uc-table :deep(td) {
+    padding: 8px 4px;
+  }
 }
 </style>

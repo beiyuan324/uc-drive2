@@ -278,12 +278,7 @@ onActivated(() => files.refresh());
     @drop.prevent="onDrop"
   >
     <div class="page-head">
-      <div>
-        <h1 class="page-title">{{ currentTitle }}</h1>
-        <p class="page-desc">
-          {{ files.currentDir === null ? '重要的文件，在这里井然有序。' : '我的文件中的文件夹' }}
-        </p>
-      </div>
+      <h1 class="page-title">{{ currentTitle }}</h1>
       <n-button type="primary" @click="files.showUpload = true">
         <template #icon><n-icon :component="UploadIcon" /></template>上传文件
       </n-button>
@@ -305,8 +300,8 @@ onActivated(() => files.refresh());
     </div>
     <!-- 工具条 -->
     <div class="toolbar">
-      <div class="toolbar-left">
-        <div class="path-bar">
+      <div v-if="files.currentDir !== null" class="toolbar-left">
+        <nav class="path-bar" aria-label="文件路径">
           <button
             class="path-btn root-btn"
             :class="{ active: files.currentDir == null }"
@@ -326,7 +321,7 @@ onActivated(() => files.refresh());
               {{ b.name }}
             </button>
           </template>
-        </div>
+        </nav>
       </div>
       <div class="toolbar-right">
         <n-tooltip trigger="hover">
@@ -401,7 +396,6 @@ onActivated(() => files.refresh());
     <div v-if="dragOver" class="drop-mask">
       <n-icon :component="CloudArrowUpIcon" size="48" />
       <p class="drop-mask-title">松开立即上传到当前目录</p>
-      <span class="drop-mask-sub">支持多文件批量上传</span>
     </div>
 
     <!-- 内容区 -->
@@ -420,7 +414,7 @@ onActivated(() => files.refresh());
         <div
           v-for="node in visibleItems"
           :key="node.id"
-          class="grid-item hover-lift"
+          class="grid-item"
           :class="{ selected: selectedId === node.id }"
           @click="selectNode(node)"
           @dblclick="openNode(node)"
@@ -437,8 +431,8 @@ onActivated(() => files.refresh());
           <div class="grid-name" :title="node.name" @click.stop="openNode(node)">
             {{ node.name }}
           </div>
-          <div class="grid-meta tabular-nums">
-            {{ node.is_dir ? '目录' : formatSize(node.size) }}
+          <div v-if="!node.is_dir" class="grid-meta tabular-nums">
+            {{ formatSize(node.size) }}
           </div>
           <div class="grid-actions" @click.stop>
             <n-tooltip trigger="hover">
@@ -474,12 +468,6 @@ onActivated(() => files.refresh());
             <template #icon
               ><n-icon :component="FolderIcon" size="54" color="var(--zinc-300)"
             /></template>
-            <template #extra>
-              <n-button size="small" type="primary" secondary @click="files.showUpload = true">
-                <template #icon><n-icon :component="UploadIcon" /></template>
-                上传文件
-              </n-button>
-            </template>
           </n-empty>
         </div>
       </div>
@@ -565,7 +553,15 @@ onActivated(() => files.refresh());
       title="上传文件"
       :style="{ width: '500px' }"
     >
-      <div
+      <input
+        ref="modalFileInputRef"
+        type="file"
+        multiple
+        class="hidden-file-input"
+        @change="onModalFileChange"
+      />
+      <button
+        type="button"
         class="upload-dropzone"
         :class="{ dragging: modalDragOver }"
         @dragenter.prevent="modalDragOver = true"
@@ -574,28 +570,9 @@ onActivated(() => files.refresh());
         @drop.prevent="onModalDrop"
         @click="triggerFileInput"
       >
-        <input
-          ref="modalFileInputRef"
-          type="file"
-          multiple
-          class="hidden-file-input"
-          @change="onModalFileChange"
-        />
-        <div class="dropzone-icon">
-          <n-icon :component="UploadIcon" size="32" color="var(--accent)" />
-        </div>
-        <div class="dropzone-title">点击选择文件，或拖拽文件到此处</div>
-        <div class="dropzone-hint">支持批量多文件上传，上传后将保存在当前目录下</div>
-        <n-button
-          size="small"
-          type="primary"
-          secondary
-          style="margin-top: 6px"
-          @click.stop="triggerFileInput"
-        >
-          浏览本地文件
-        </n-button>
-      </div>
+        <n-icon :component="UploadIcon" size="32" color="var(--accent)" />
+        <span class="dropzone-title">选择文件或拖到这里</span>
+      </button>
       <div v-if="files.uploading" class="upload-progress-box">
         <n-spin size="small" />
         <span>正在上传中，请稍候…</span>
@@ -856,6 +833,7 @@ onActivated(() => files.refresh());
   flex-shrink: 0;
 }
 .toolbar-right {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -879,10 +857,6 @@ onActivated(() => files.refresh());
   font-size: 18px;
   font-weight: 600;
   margin: 0;
-}
-.drop-mask-sub {
-  font-size: 13px;
-  opacity: 0.9;
 }
 .error-box {
   margin-bottom: 16px;
@@ -912,19 +886,16 @@ onActivated(() => files.refresh());
   border-radius: var(--radius-card);
   cursor: pointer;
   user-select: none;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: var(--shadow-sm);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .grid-item:hover {
-  background: var(--surface);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--zinc-300));
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  background: var(--hover);
+  border-color: var(--zinc-300);
 }
 .grid-item.selected {
   border-color: var(--accent);
   background: var(--selection);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow-md);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .grid-icon {
   display: flex;
@@ -970,7 +941,6 @@ onActivated(() => files.refresh());
 }
 .empty-box {
   grid-column: 1 / -1;
-  padding: 70px 0;
 }
 .list-table {
   --n-th-color: transparent;
@@ -1029,6 +999,7 @@ onActivated(() => files.refresh());
   text-align: right;
 }
 .upload-dropzone {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1046,24 +1017,10 @@ onActivated(() => files.refresh());
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 5%, var(--zinc-100));
 }
-.dropzone-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-}
 .dropzone-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--zinc-900);
-}
-.dropzone-hint {
-  font-size: 12px;
-  color: var(--zinc-500);
 }
 .hidden-file-input {
   display: none;

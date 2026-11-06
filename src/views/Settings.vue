@@ -8,7 +8,6 @@ import {
   NDescriptionsItem,
   NTag,
   NSpin,
-  NSpace,
   NInput,
   NInputNumber,
   NAlert,
@@ -21,13 +20,7 @@ import {
 import {
   PhArrowClockwise as RefreshIcon,
   PhFloppyDisk as SaveIcon,
-  PhTrash as TrashIcon,
   PhFolderOpen as FolderOpenIcon,
-  PhFolderSimple as StorageIcon,
-  PhPulse as PulseIcon,
-  PhSliders as SlidersIcon,
-  PhShieldCheck as ShieldIcon,
-  PhInfo as InfoIcon,
   PhCopy as CopyIcon,
   PhSun as SunIcon,
   PhMoon as MoonIcon,
@@ -36,20 +29,15 @@ import {
 import { useSettingsStore } from '@/stores/settings';
 import { api, getBase } from '@/api';
 import type { ThemeMode } from '@/types';
-import { version } from '../../package.json';
 import AppUpdateSettings from '@/components/AppUpdateSettings.vue';
 import DriveCredentialSettings from '@/components/DriveCredentialSettings.vue';
 
 const message = useMessage();
 const settings = useSettingsStore();
+const credentials = ref<InstanceType<typeof DriveCredentialSettings> | null>(null);
 const health = ref<{ ok: boolean; gopeed: boolean; version: string } | null>(null);
 const base = ref('');
 const loading = ref(true);
-
-// UC Cookie
-const hasCookie = ref(false);
-const cookieInput = ref('');
-const savingCookie = ref(false);
 
 // 存储目录（本地编辑，保存后提交后端）
 const storageDirInput = ref('');
@@ -131,10 +119,6 @@ async function refreshAll() {
       .health()
       .then((h) => (health.value = h))
       .catch(() => (health.value = null)),
-    api
-      .cookieStatus()
-      .then((r) => (hasCookie.value = r.hasCookie))
-      .catch(() => {}),
   ]);
   dlUc.value = settings.downloadConfig.ucConnections;
   dlHttp.value = settings.downloadConfig.httpConnections;
@@ -160,44 +144,14 @@ async function saveDownloadParams() {
   }
 }
 
-async function saveCookie() {
-  const v = cookieInput.value.trim();
-  if (!v) return message.warning('请输入 Cookie');
-  savingCookie.value = true;
-  try {
-    await api.saveCookie(v);
-    hasCookie.value = true;
-    cookieInput.value = '';
-    message.success('Cookie 已加密保存');
-  } catch (e) {
-    message.error((e as Error).message);
-  } finally {
-    savingCookie.value = false;
-  }
-}
-
-async function removeCookie() {
-  try {
-    await api.clearCookie();
-    hasCookie.value = false;
-    cookieInput.value = '';
-    message.success('Cookie 已清除');
-  } catch (e) {
-    message.error((e as Error).message);
-  }
-}
-
 onActivated(refreshAll);
 </script>
 
 <template>
   <div class="settings-page">
     <div class="page-head">
-      <div>
-        <h2 class="page-title">设置</h2>
-        <p class="page-desc">你的空间，依你的偏好。</p>
-      </div>
-      <n-button size="small" secondary @click="refreshAll">
+      <h1 class="page-title">设置</h1>
+      <n-button size="small" secondary @click="refreshAll(); credentials?.refresh()">
         <template #icon><n-icon :component="RefreshIcon" /></template>
         刷新状态
       </n-button>
@@ -205,12 +159,7 @@ onActivated(refreshAll);
 
     <n-spin :show="loading">
       <div class="cards">
-        <n-card class="card appearance-card" :bordered="false">
-          <template #header
-            ><div class="card-title-row">
-              <n-icon :component="SunIcon" size="18" color="var(--accent)" /><span>外观</span>
-            </div></template
-          >
+        <n-card class="card" title="外观" :bordered="false">
           <n-radio-group
             :value="settings.themeMode"
             class="appearance-options"
@@ -228,26 +177,13 @@ onActivated(refreshAll);
           </n-radio-group>
         </n-card>
         <!-- 存储目录 -->
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <div class="card-title-icon">
-                <n-icon :component="StorageIcon" size="18" color="var(--accent)" />
-              </div>
-              <span>存储目录</span>
-            </div>
-          </template>
+        <n-card class="card" title="存储目录" :bordered="false">
           <div class="storage-edit">
-            <div class="storage-label">
-              <span class="storage-name">本地网盘文件根目录</span>
-              <span class="storage-desc"
-                >上传、下载完成及离线转存的文件存放于此。支持任意磁盘路径（如 D:\网盘）。</span
-              >
-            </div>
             <div class="storage-input-row">
               <n-input
                 v-model:value="storageDirInput"
-                placeholder="输入或浏览选择网盘存储目录，例如 D:\网盘"
+                placeholder="选择文件保存位置"
+                :input-props="{ 'aria-label': '存储目录' }"
                 class="storage-input"
               />
               <n-button size="medium" secondary @click="browseStorageDir">
@@ -257,7 +193,7 @@ onActivated(refreshAll);
             </div>
             <div class="storage-options-row">
               <n-checkbox v-model:checked="moveFiles"
-                >保存时同时将现有文件迁移到新目录（支持跨分区）</n-checkbox
+                >迁移现有文件</n-checkbox
               >
             </div>
             <div class="storage-actions-row">
@@ -267,17 +203,18 @@ onActivated(refreshAll);
                 :disabled="!isCustomStorageDir"
                 @click="resetStorageDir"
               >
-                恢复默认存储路径
+                恢复默认
               </n-button>
               <n-button
                 size="small"
                 type="primary"
                 secondary
                 :loading="savingStorage"
+                aria-label="保存存储目录"
                 @click="saveStorageDir"
               >
                 <template #icon><n-icon :component="SaveIcon" /></template>
-                保存并应用存储目录
+                保存
               </n-button>
             </div>
             <n-alert v-if="storageChanged" type="success" :show-icon="false" class="storage-alert">
@@ -299,9 +236,10 @@ onActivated(refreshAll);
                       size="tiny"
                       quaternary
                       circle
+                      aria-label="复制存储路径"
                       @click="copyStoragePath(settings.info?.storageDir || '')"
                     >
-                      <template #icon><n-icon :component="CopyIcon" /></template>
+                      <template #icon><n-icon :component="copiedPath ? CheckIcon : CopyIcon" /></template>
                     </n-button>
                   </template>
                   复制路径
@@ -318,33 +256,23 @@ onActivated(refreshAll);
         </n-card>
 
         <!-- 服务引擎状态 -->
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <div class="card-title-icon">
-                <n-icon :component="PulseIcon" size="18" color="var(--accent)" />
-              </div>
-              <span>服务状态</span>
-            </div>
-          </template>
+        <n-card class="card" title="服务状态" :bordered="false">
           <n-descriptions
             :column="1"
             label-placement="left"
             size="small"
             class="settings-desc-table"
           >
-            <n-descriptions-item label="内置后端服务 (Rust / axum)">
+            <n-descriptions-item label="本地服务">
               <div class="status-cell">
-                <span v-if="health?.ok" class="pulse-dot"></span>
                 <n-tag :type="health?.ok ? 'success' : 'error'" size="small" :bordered="false">
                   {{ health?.ok ? '运行中' : '不可用' }}
                 </n-tag>
                 <span class="mono inline-mono">{{ base || '127.0.0.1:17210' }}</span>
               </div>
             </n-descriptions-item>
-            <n-descriptions-item label="下载引擎 (gopeed-web)">
+            <n-descriptions-item label="下载引擎">
               <div class="status-cell">
-                <span v-if="settings.info?.gopeed.running" class="pulse-dot"></span>
                 <n-tag
                   :type="settings.info?.gopeed.running ? 'success' : 'warning'"
                   size="small"
@@ -361,22 +289,9 @@ onActivated(refreshAll);
         </n-card>
 
         <!-- 下载并发调优 -->
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <div class="card-title-icon">
-                <n-icon :component="SlidersIcon" size="18" color="var(--accent)" />
-              </div>
-              <span>下载偏好</span>
-            </div>
-          </template>
+        <n-card class="card" title="下载偏好" :bordered="false">
           <div class="dl-row">
-            <div class="dl-label">
-              <span class="dl-name">UC 直链并发连接数</span>
-              <span class="dl-desc"
-                >UC 直链每连接限速约 100KB/s，多连接可线性叠加提速。推荐 200~500。</span
-              >
-            </div>
+            <span class="dl-name">UC 连接数</span>
             <div class="dl-input-wrapper">
               <n-input-number
                 v-model:value="dlUc"
@@ -384,20 +299,17 @@ onActivated(refreshAll);
                 :max="1000"
                 :step="50"
                 class="dl-input"
+                :input-props="{ 'aria-label': 'UC 连接数' }"
               />
               <span class="unit-label">连接</span>
             </div>
           </div>
           <div class="dl-row">
-            <div class="dl-label">
-              <span class="dl-name">普通 HTTP / HTTPS 任务连接数</span>
-              <span class="dl-desc"
-                >适用于普通直链下载；填 0 表示遵循 gopeed 全局引擎默认设置（500）。</span
-              >
-            </div>
+            <span class="dl-name">直链连接数（0 为自动）</span>
             <div class="dl-input-wrapper">
               <n-input-number
                 v-model:value="dlHttp"
+                :input-props="{ 'aria-label': '直链连接数' }"
                 :min="0"
                 :max="1000"
                 :step="20"
@@ -407,120 +319,35 @@ onActivated(refreshAll);
             </div>
           </div>
           <div class="dl-row">
-            <div class="dl-label">
-              <span class="dl-name">同时并发下载任务数</span>
-              <span class="dl-desc">超过此数量的任务将自动在队列中排队等待调度。默认 3。</span>
-            </div>
+            <span class="dl-name">同时下载</span>
             <div class="dl-input-wrapper">
-              <n-input-number v-model:value="dlMaxRunning" :min="1" :max="10" class="dl-input" />
+              <n-input-number v-model:value="dlMaxRunning" :input-props="{ 'aria-label': '同时下载任务数' }" :min="1" :max="10" class="dl-input" />
               <span class="unit-label">个任务</span>
             </div>
           </div>
-          <div class="actions" style="display: flex; justify-content: flex-end">
+          <div class="actions">
             <n-button
               size="small"
               type="primary"
               secondary
               :loading="savingDl"
+              aria-label="保存下载偏好"
               @click="saveDownloadParams"
             >
               <template #icon><n-icon :component="SaveIcon" /></template>
-              保存并发参数
+              保存
             </n-button>
           </div>
         </n-card>
 
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <n-icon :component="ShieldIcon" size="18" color="var(--accent)" />
-              <span>夸克 / 百度 / 迅雷网盘凭据</span>
-            </div>
-          </template>
-          <drive-credential-settings />
+        <n-card class="card" title="网盘凭据" :bordered="false">
+          <drive-credential-settings ref="credentials" />
         </n-card>
 
-        <!-- UC 网盘凭据 -->
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <div class="card-title-icon">
-                <n-icon :component="ShieldIcon" size="18" color="var(--accent)" />
-              </div>
-              <span>UC 网盘凭据</span>
-            </div>
-          </template>
-          <n-alert type="info" :show-icon="false" class="cookie-alert">
-            部分私密分享解析与大文件直链超时刷新需要有效 Cookie。存储采用本地
-            <strong>AES-256-GCM</strong> 高强度加密，确保凭据安全。
-          </n-alert>
-          <n-input
-            v-model:value="cookieInput"
-            type="textarea"
-            :rows="3"
-            placeholder="粘贴 UC 网盘网页版请求头中的 Cookie（保存时将本地加密存储）"
-            class="cookie-input"
-          />
-          <div class="cookie-actions-row">
-            <n-space size="small" align="center">
-              <n-button
-                size="small"
-                type="primary"
-                secondary
-                :loading="savingCookie"
-                @click="saveCookie"
-              >
-                <template #icon><n-icon :component="SaveIcon" /></template>
-                加密保存 Cookie
-              </n-button>
-              <n-button size="small" secondary :disabled="!hasCookie" @click="removeCookie">
-                <template #icon><n-icon :component="TrashIcon" /></template>
-                清除凭据
-              </n-button>
-            </n-space>
-            <n-tag v-if="hasCookie" type="success" size="small" :bordered="false"
-              >已保存 Cookie</n-tag
-            >
-            <n-tag v-else type="warning" size="small" :bordered="false">未配置 Cookie</n-tag>
-          </div>
-        </n-card>
-
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <n-icon :component="RefreshIcon" size="18" color="var(--accent)" />
-              <span>软件更新</span>
-            </div>
-          </template>
+        <n-card class="card" title="软件更新" :bordered="false">
           <app-update-settings />
         </n-card>
 
-        <!-- 关于与技术栈 -->
-        <n-card class="card" :bordered="true">
-          <template #header>
-            <div class="card-title-row">
-              <div class="card-title-icon">
-                <n-icon :component="InfoIcon" size="18" color="var(--zinc-500)" />
-              </div>
-              <span>关于 folder-drive</span>
-            </div>
-          </template>
-          <n-descriptions
-            :column="1"
-            label-placement="left"
-            size="small"
-            class="settings-desc-table"
-          >
-            <n-descriptions-item label="客户端版本">
-              <span class="mono">{{ version }}</span>
-            </n-descriptions-item>
-            <n-descriptions-item label="架构技术栈">
-              <span class="stack-text"
-                >Tauri v2 + Vue3 / Naive UI + Rust (axum) + SQLite (WAL) + gopeed</span
-              >
-            </n-descriptions-item>
-          </n-descriptions>
-        </n-card>
       </div>
     </n-spin>
   </div>
@@ -530,25 +357,21 @@ onActivated(refreshAll);
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 .card {
-  border: 1px solid var(--card-border) !important;
-  border-radius: var(--radius-card) !important;
-  background: var(--card-bg) !important;
-  box-shadow: var(--shadow-sm);
-  padding: 4px 8px 12px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 0;
+  background: transparent;
 }
-.card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--card-border)) !important;
+.card + .card {
+  border-top: 1px solid var(--line);
 }
 .card :deep(.n-card-header) {
-  padding: 16px 12px 14px;
+  padding: 24px 0 16px;
+  font-size: 15px;
+  font-weight: 600;
 }
 .card :deep(.n-card-content) {
-  padding: 0 12px 12px;
+  padding: 0 0 24px;
 }
 .appearance-options {
   display: inline-flex;
@@ -559,22 +382,11 @@ onActivated(refreshAll);
   gap: 9px;
   padding: 0 16px;
 }
-.card-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-}
-.card-title-icon {
-  display: flex;
-  align-items: center;
-}
 .mono {
-  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
-  font-size: 12.5px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
   color: var(--zinc-600);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .inline-mono {
   margin-left: 8px;
@@ -582,15 +394,14 @@ onActivated(refreshAll);
 .settings-desc-table :deep(td) {
   padding: 6px 0;
 }
-.path-display-cell {
+.path-display-cell,
+.status-cell {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 .status-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
 }
 .dl-row {
   display: flex;
@@ -598,24 +409,9 @@ onActivated(refreshAll);
   justify-content: space-between;
   gap: 16px;
   padding: 12px 0;
-  border-bottom: 1px solid var(--zinc-100);
-}
-.dl-row:last-of-type {
-  border-bottom: none;
-}
-.dl-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
 }
 .dl-name {
-  font-size: 13.5px;
-  font-weight: 500;
-}
-.dl-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
+  font-size: 13px;
 }
 .dl-input-wrapper {
   display: flex;
@@ -628,32 +424,21 @@ onActivated(refreshAll);
 }
 .unit-label {
   font-size: 12px;
-  color: var(--zinc-400);
+  color: var(--zinc-500);
   width: 40px;
 }
 .actions {
+  display: flex;
+  justify-content: flex-end;
   margin-top: 14px;
 }
 .storage-edit {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding-bottom: 16px;
   margin-bottom: 16px;
-  border-bottom: 1px solid var(--zinc-100);
-}
-.storage-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.storage-name {
-  font-size: 13.5px;
-  font-weight: 500;
-}
-.storage-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
+  border-bottom: 1px solid var(--line);
 }
 .storage-input-row {
   display: flex;
@@ -661,9 +446,10 @@ onActivated(refreshAll);
   align-items: center;
 }
 .storage-input {
-  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
-  font-size: 12.5px;
+  font-family: Consolas, monospace;
+  font-size: 13px;
   flex: 1;
+  min-width: 0;
 }
 .storage-options-row {
   font-size: 13px;
@@ -673,29 +459,22 @@ onActivated(refreshAll);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 4px;
 }
 .storage-alert {
   font-size: 13px;
-  margin-top: 4px;
 }
-.cookie-alert {
-  margin-bottom: 12px;
-  font-size: 13px;
-}
-.cookie-input {
-  margin-bottom: 10px;
-  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
-  font-size: 12px;
-}
-.cookie-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.stack-text {
-  font-size: 12.5px;
-  color: var(--zinc-500);
+@media (max-width: 680px) {
+  .storage-input-row,
+  .storage-actions-row {
+    flex-wrap: wrap;
+  }
+  .storage-input {
+    flex-basis: 100%;
+  }
+  .dl-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 </style>

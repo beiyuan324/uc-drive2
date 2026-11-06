@@ -32,11 +32,6 @@ const statusMeta: Record<
   replaced: { label: '已替换', type: 'info' },
 };
 
-const doneCount = computed(() => history.value.filter((t) => t.status === 'done').length);
-const failCount = computed(
-  () => history.value.filter((t) => t.status === 'error' || t.status === 'cookie_expired').length,
-);
-
 const filteredHistory = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return history.value;
@@ -144,28 +139,15 @@ function fileName(t: TaskItem): string {
 <template>
   <div class="history-view">
     <div class="page-head">
-      <div>
-        <h2 class="page-title">历史记录</h2>
-        <p class="page-desc">每一份文件，都有迹可循。</p>
-      </div>
-      <div v-if="history.length > 0" class="stats-row">
-        <span class="stat-pill"
-          >共 <strong class="tabular-nums">{{ history.length }}</strong> 条</span
-        >
-        <span v-if="doneCount > 0" class="stat-pill success"
-          >完成 <strong class="tabular-nums">{{ doneCount }}</strong></span
-        >
-        <span v-if="failCount > 0" class="stat-pill error"
-          >异常 <strong class="tabular-nums">{{ failCount }}</strong></span
-        >
-      </div>
+      <h1 class="page-title">历史记录</h1>
     </div>
 
     <div class="panel">
       <div class="panel-toolbar">
         <n-input
           v-model:value="searchQuery"
-          placeholder="搜索文件名或来源…"
+          placeholder="搜索文件名或来源"
+          :input-props="{ 'aria-label': '搜索历史记录' }"
           clearable
           size="small"
           class="history-search"
@@ -192,7 +174,7 @@ function fileName(t: TaskItem): string {
             <th>文件名</th>
             <th style="width: 100px">来源</th>
             <th style="width: 110px">状态</th>
-            <th style="width: 150px; text-align: right">完成/更新时间</th>
+            <th style="width: 150px; text-align: right">时间</th>
             <th style="width: 140px; text-align: right">操作</th>
           </tr>
         </thead>
@@ -206,7 +188,7 @@ function fileName(t: TaskItem): string {
             </td>
             <td>
               <span class="source-tag">{{
-                driveNames[t.source as DrivePlatform] ? driveNames[t.source as DrivePlatform] + '网盘' : t.source.toUpperCase()
+                driveNames[t.source as DrivePlatform] || t.source.toUpperCase()
               }}</span>
             </td>
             <td>
@@ -258,46 +240,6 @@ function fileName(t: TaskItem): string {
 </template>
 
 <style scoped>
-.stats-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.stat-pill {
-  font-size: 12px;
-  color: var(--zinc-600);
-  background: var(--zinc-100);
-  border: 1px solid var(--zinc-200);
-  padding: 3px 9px;
-  border-radius: 12px;
-}
-.stat-pill strong {
-  font-weight: 600;
-  color: var(--zinc-900);
-}
-.stat-pill.success {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
-}
-.stat-pill.success strong {
-  color: var(--accent);
-}
-.stat-pill.error {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-}
-.stat-pill.error strong {
-  color: #ef4444;
-}
-.panel {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-card);
-  padding: 16px 20px;
-  box-shadow: var(--shadow-sm);
-}
 .panel-toolbar {
   display: flex;
   align-items: center;
@@ -329,9 +271,6 @@ function fileName(t: TaskItem): string {
   justify-content: center;
   padding: 36px 0;
 }
-.empty-box {
-  padding: 50px 0;
-}
 .history-table :deep(td) {
   padding: 10px 12px;
 }
@@ -351,10 +290,6 @@ function fileName(t: TaskItem): string {
   font-size: 11.5px;
   font-weight: 500;
   color: var(--zinc-500);
-  background: var(--zinc-100);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--zinc-200);
 }
 .muted {
   color: var(--zinc-500);
@@ -368,5 +303,32 @@ function fileName(t: TaskItem): string {
   white-space: nowrap;
   font-size: 11.5px;
   color: #ef4444;
+}
+@media (max-width: 680px) {
+  .history-table :deep(th:nth-child(2)),
+  .history-table :deep(td:nth-child(2)),
+  .history-table :deep(th:nth-child(4)),
+  .history-table :deep(td:nth-child(4)) {
+    display: none;
+  }
+  .history-table :deep(th:nth-child(3)) {
+    width: 76px !important;
+  }
+  .history-table :deep(th:last-child) {
+    width: 100px !important;
+  }
+  .history-table :deep(td) {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .history-table :deep(.n-space) {
+    gap: 4px !important;
+  }
+  .history-table :deep(.n-button) {
+    font-size: 11px;
+  }
+  .history-table :deep(.n-button:not([aria-label]) .n-button__icon) {
+    display: none;
+  }
 }
 </style>

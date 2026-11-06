@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
-  NAlert, NButton, NDescriptions, NDescriptionsItem, NProgress, NSpace, NSwitch, NTag, useDialog, useMessage,
+  NAlert, NButton, NDescriptions, NDescriptionsItem, NProgress, NSpace, NSwitch, useDialog, useMessage,
 } from 'naive-ui';
 import { formatSize } from '@/api';
 import { useUpdaterStore } from '@/stores/updater';
@@ -33,21 +33,21 @@ function install() {
 <template>
   <div class="update-settings">
     <div class="auto-check-row">
-      <div><strong>自动检查更新</strong><p>启动后检查，此后每 6 小时检查一次。</p></div>
-      <n-switch :value="updates.autoCheck" :disabled="!updates.desktop" @update:value="updates.setAutoCheck" />
+      <strong id="auto-update-label" title="启动时及每 6 小时检查一次">自动检查更新</strong>
+      <n-switch aria-labelledby="auto-update-label" :value="updates.autoCheck" :disabled="!updates.desktop" @update:value="updates.setAutoCheck" />
     </div>
     <n-descriptions :column="1" label-placement="left" size="small">
       <n-descriptions-item label="当前版本">{{ updates.currentVersion }}</n-descriptions-item>
-      <n-descriptions-item label="更新状态"><n-tag size="small" :bordered="false">{{ statusText }}</n-tag></n-descriptions-item>
+      <n-descriptions-item label="更新状态">{{ statusText }}</n-descriptions-item>
       <n-descriptions-item v-if="updates.update" label="最新版本">{{ updates.update.version }}</n-descriptions-item>
       <n-descriptions-item v-if="updates.lastCheckedAt" label="上次检查">{{ updates.lastCheckedAt }}</n-descriptions-item>
     </n-descriptions>
     <n-alert v-if="!updates.canInstall" type="info" :show-icon="false">
-      {{ updates.desktop ? '开发模式支持检查更新；下载安装请使用 Windows x64 正式安装版。' : '应用内更新仅在 Windows x64 正式安装版中可用。' }}
+      {{ updates.desktop ? '开发模式仅支持检查更新' : '请在桌面版中更新' }}
     </n-alert>
-    <div v-if="updates.update" class="release-notes">
-      <strong>发布说明</strong>
-      <p>{{ updates.update.notes || '此版本未提供发布说明。' }}</p>
+    <div v-if="updates.update?.notes" class="release-notes">
+      <strong>更新内容</strong>
+      <p>{{ updates.update.notes }}</p>
     </div>
     <div v-if="updates.phase === 'downloading'" class="download-progress">
       <n-progress type="line" :percentage="updates.progress" :processing="true" :show-indicator="!!updates.totalBytes" />
@@ -73,7 +73,6 @@ function install() {
 .update-settings { display: flex; flex-direction: column; gap: 14px; }
 .auto-check-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .auto-check-row strong, .release-notes strong { font-size: 13px; font-weight: 500; }
-.auto-check-row p { margin: 4px 0 0; color: var(--zinc-500); font-size: 12px; }
 .release-notes p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; font-size: 13px; }
 .download-progress span { color: var(--zinc-500); font-size: 12px; }
 </style>
