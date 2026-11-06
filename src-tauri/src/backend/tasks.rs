@@ -16,7 +16,9 @@ use super::files;
 use super::gopeed::{GopeedEvent, GopeedManager};
 use super::models::{DownloadConfigDto, TaskDto};
 use super::uc;
-use super::util::{basename_of, norm_path, now_iso, now_ms, relative_suffix, unique_path};
+use super::util::{
+    basename_of, move_path, norm_path, now_iso, now_ms, relative_suffix, unique_path, value_i64,
+};
 
 #[derive(Debug, Clone)]
 struct TaskRow {
@@ -37,7 +39,6 @@ struct TaskRow {
 
 impl TaskRow {
     fn dto(&self) -> TaskDto {
-        let metadata = serde_json::from_str(&self.metadata).unwrap_or_else(|_| json!({}));
         TaskDto {
             id: self.id,
             gopeed_id: self.gopeed_id.clone(),
@@ -48,7 +49,7 @@ impl TaskRow {
             speed: self.speed,
             error: self.error.clone(),
             target_dir: self.target_dir.clone(),
-            metadata,
+            metadata: self.meta(),
             created_at: self.created_at.clone(),
             updated_at: self.updated_at.clone(),
             finished_at: self.finished_at.clone(),
@@ -87,18 +88,18 @@ fn read_row(db: &Connection, id: i64) -> ApiResult<Option<TaskRow>> {
         task_from_sql,
     )
     .optional()
-    .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))
+    .map_err(ApiError::from_db)
 }
 
 fn rows(db: &Connection, sql: &str) -> ApiResult<Vec<TaskRow>> {
     let mut stmt = db
         .prepare(sql)
-        .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+        .map_err(ApiError::from_db)?;
     let mapped = stmt
         .query_map([], task_from_sql)
-        .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+        .map_err(ApiError::from_db)?;
     mapped
-        .map(|r| r.map_err(|e| ApiError::internal(format!("数据库错误: {e}"))))
+        .map(|r| r.map_err(ApiError::from_db))
         .collect()
 }
 
@@ -352,7 +353,7 @@ impl TaskService {
             [],
         )
         .map(|n| n as i64)
-        .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))
+        .map_err(ApiError::from_db)
     }
 
     /// 创建任务：普通链接、种子和官方网盘直链均由 Gopeed 执行。
@@ -427,7 +428,7 @@ impl TaskService {
                     now,
                 ],
             )
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
             let id = db.last_insert_rowid();
             let final_dir = offline.join(format!("task-{id}"));
             if let Err(e) = std::fs::rename(&temp_dir, &final_dir) {
@@ -438,7 +439,7 @@ impl TaskService {
                 "UPDATE tasks SET target_dir = ?1 WHERE id = ?2",
                 params![norm_path(&final_dir), id],
             )
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
             (id, final_dir)
         };
 
@@ -453,7 +454,7 @@ impl TaskService {
                         "UPDATE tasks SET gopeed_id = ?1, status = 'queued', updated_at = ?2 WHERE id = ?3",
                         params![gid, now_iso(), id],
                     )
-                    .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+                    .map_err(ApiError::from_db)?;
                 }
                 self.get(id)?
                     .ok_or_else(|| ApiError::internal("任务登记失败"))
@@ -534,7 +535,7 @@ impl TaskService {
                 "UPDATE tasks SET status = 'paused', updated_at = ?1 WHERE id = ?2",
                 params![now_iso(), id],
             )
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
         }
         self.get(id)?
             .ok_or_else(|| ApiError::internal("任务不存在"))
@@ -557,7 +558,7 @@ impl TaskService {
                 "UPDATE tasks SET status = 'running', updated_at = ?1 WHERE id = ?2",
                 params![now_iso(), id],
             )
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
         }
         self.get(id)?
             .ok_or_else(|| ApiError::internal("任务不存在"))
@@ -578,11 +579,11 @@ impl TaskService {
                 "DELETE FROM files WHERE path = ?1 OR path LIKE ?2",
                 params![row.target_dir, like],
             )
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
         }
         let db = self.db.lock().unwrap();
         db.execute("DELETE FROM tasks WHERE id = ?1", [id])
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
         Ok(())
     }
 
@@ -894,13 +895,7 @@ impl TaskService {
         }
 
         let _ = self.gopeed.remove(&row.gopeed_id, false).await;
-        let headers = json!({
-            "Cookie": session.cookies,
-            "User-Agent": uc::UA,
-            "Referer": "https://drive.uc.cn/",
-            "Origin": "https://drive.uc.cn",
-            "x-csrf-token": session.ctoken,
-        });
+        let headers = uc::download_headers(&session.cookies, &session.ctoken);
         let request = json!({ "url": url, "extra": { "header": headers } });
         let mut opts = json!({ "path": row.target_dir });
         if let Some(filename) = uc_obj
@@ -972,7 +967,7 @@ impl TaskService {
             && norm_path(files[0].parent().unwrap_or_else(|| Path::new("."))) == row.target_dir;
         if single {
             let dest = unique_path(&storage.join(files[0].file_name().unwrap_or_default()));
-            move_download_file(&files[0], &dest).map_err(|e| ApiError::from_io(&e))?;
+            move_path(&files[0], &dest).map_err(|e| ApiError::from_io(&e))?;
             let root_id: Option<i64> = db
                 .query_row(
                     "SELECT id FROM files WHERE path = ?1",
@@ -980,7 +975,7 @@ impl TaskService {
                     |r| r.get(0),
                 )
                 .optional()
-                .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+                .map_err(ApiError::from_db)?;
             files::upsert_file_row(&db, &storage, root_id, &dest)?;
         } else {
             let mut clean_name = if task_name.is_empty() {
@@ -1013,7 +1008,7 @@ impl TaskService {
                     ts
                 ],
             )
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+            .map_err(ApiError::from_db)?;
             for source in files {
                 let Some(relative) = relative_suffix(&row.target_dir, &norm_path(&source)) else {
                     continue;
@@ -1022,7 +1017,7 @@ impl TaskService {
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| ApiError::from_io(&e))?;
                 }
-                move_download_file(&source, &dest).map_err(|e| ApiError::from_io(&e))?;
+                move_path(&source, &dest).map_err(|e| ApiError::from_io(&e))?;
                 files::upsert_file_row(&db, &storage, None, &dest)?;
             }
         }
@@ -1031,7 +1026,7 @@ impl TaskService {
             "UPDATE tasks SET target_dir = ?1 WHERE id = ?2",
             params![norm_path(&storage), task_id],
         )
-        .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?;
+        .map_err(ApiError::from_db)?;
         Ok(())
     }
 }
@@ -1052,14 +1047,6 @@ fn value_u64(value: Option<&Value>) -> Option<u64> {
     })
 }
 
-fn value_i64(value: Option<&Value>) -> Option<i64> {
-    value.and_then(|v| match v {
-        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|v| v as i64)),
-        Value::String(s) => s.parse::<i64>().ok(),
-        _ => None,
-    })
-}
-
 fn clamp_number(value: Value, min: i64, max: i64) -> ApiResult<i64> {
     let n = match value {
         Value::Number(n) => n.as_f64(),
@@ -1073,21 +1060,6 @@ fn clamp_number(value: Value, min: i64, max: i64) -> ApiResult<i64> {
     Ok((n.round() as i64).clamp(min, max))
 }
 
-fn is_cross_device(err: &std::io::Error) -> bool {
-    err.raw_os_error() == Some(17) || err.kind() == std::io::ErrorKind::CrossesDevices
-}
-
-fn move_download_file(src: &Path, dest: &Path) -> std::io::Result<()> {
-    match std::fs::rename(src, dest) {
-        Ok(()) => Ok(()),
-        Err(err) if is_cross_device(&err) => {
-            std::fs::copy(src, dest)?;
-            std::fs::remove_file(src)
-        }
-        Err(err) => Err(err),
-    }
-}
-
 fn unique_dir(db: &Connection, storage: &Path, name: &str) -> ApiResult<PathBuf> {
     let mut candidate = storage.join(name);
     let mut i = 1;
@@ -1098,7 +1070,7 @@ fn unique_dir(db: &Connection, storage: &Path, name: &str) -> ApiResult<PathBuf>
                 Ok(true)
             })
             .optional()
-            .map_err(|e| ApiError::internal(format!("数据库错误: {e}")))?
+            .map_err(ApiError::from_db)?
             .unwrap_or(false);
         if !exists && !candidate.exists() {
             return Ok(candidate);

@@ -28,21 +28,21 @@ const props = defineProps<{
   badge?: boolean;
 }>();
 
-const icon = computed(() => {
-  if (props.isDir) return FolderGlyph;
+const visual = computed(() => {
+  if (props.isDir) return { icon: FolderGlyph, color: '#55b7ed' };
   const ext = props.name.split('.').pop()?.toLowerCase() || '';
-  if (props.mime.startsWith('image/')) return ImageGlyph;
-  if (props.mime.startsWith('video/')) return FilmGlyph;
-  if (props.mime.startsWith('audio/')) return MusicGlyph;
+  if (props.mime.startsWith('image/')) return { icon: ImageGlyph, color: '#eab308' };
+  if (props.mime.startsWith('video/')) return { icon: FilmGlyph, color: '#f43f5e' };
+  if (props.mime.startsWith('audio/')) return { icon: MusicGlyph, color: '#8b5cf6' };
   switch (ext) {
     case 'zip':
     case 'rar':
     case '7z':
     case 'tar':
     case 'gz':
-      return ZipGlyph;
+      return { icon: ZipGlyph, color: '#d97706' };
     case 'pdf':
-      return PdfGlyph;
+      return { icon: PdfGlyph, color: '#ef4444' };
     case 'js':
     case 'ts':
     case 'html':
@@ -57,73 +57,24 @@ const icon = computed(() => {
     case 'c':
     case 'cpp':
     case 'sh':
-      return CodeGlyph;
+      return { icon: CodeGlyph, color: '#3b82f6' };
     case 'csv':
-      return CsvGlyph;
+      return { icon: CsvGlyph, color: '#10b981' };
     case 'xls':
     case 'xlsx':
-      return XlsGlyph;
+      return { icon: XlsGlyph, color: '#10b981' };
     case 'ppt':
     case 'pptx':
-      return PptGlyph;
+      return { icon: PptGlyph, color: '#f97316' };
     case 'doc':
     case 'docx':
-      return DocGlyph;
+      return { icon: DocGlyph, color: '#2563eb' };
     case 'txt':
     case 'md':
     case 'log':
-      return TextGlyph;
+      return { icon: TextGlyph, color: 'var(--zinc-500)' };
     default:
-      return FileGlyph;
-  }
-});
-
-const categoryColor = computed(() => {
-  if (props.isDir) return '#55b7ed';
-  const ext = props.name.split('.').pop()?.toLowerCase() || '';
-  if (props.mime.startsWith('image/')) return '#eab308';
-  if (props.mime.startsWith('video/')) return '#f43f5e';
-  if (props.mime.startsWith('audio/')) return '#8b5cf6';
-  switch (ext) {
-    case 'zip':
-    case 'rar':
-    case '7z':
-    case 'tar':
-    case 'gz':
-      return '#d97706';
-    case 'pdf':
-      return '#ef4444';
-    case 'js':
-    case 'ts':
-    case 'html':
-    case 'css':
-    case 'json':
-    case 'xml':
-    case 'vue':
-    case 'py':
-    case 'go':
-    case 'rs':
-    case 'java':
-    case 'c':
-    case 'cpp':
-    case 'sh':
-      return '#3b82f6';
-    case 'csv':
-    case 'xls':
-    case 'xlsx':
-      return '#10b981';
-    case 'ppt':
-    case 'pptx':
-      return '#f97316';
-    case 'doc':
-    case 'docx':
-      return '#2563eb';
-    case 'txt':
-    case 'md':
-    case 'log':
-      return 'var(--zinc-500)';
-    default:
-      return 'var(--zinc-500)';
+      return { icon: FileGlyph, color: 'var(--zinc-500)' };
   }
 });
 </script>
@@ -133,15 +84,15 @@ const categoryColor = computed(() => {
     v-if="badge"
     class="icon-badge"
     :class="{ 'is-folder': isDir }"
-    :style="{ '--cat-color': categoryColor }"
+    :style="{ '--cat-color': visual.color }"
   >
-    <n-icon :size="size ?? 28" :color="categoryColor"
-      ><component :is="icon" :weight="isDir ? 'fill' : 'regular'"
+    <n-icon :size="size ?? 28" :color="visual.color"
+      ><component :is="visual.icon" :weight="isDir ? 'fill' : 'regular'"
     /></n-icon>
   </div>
   <n-icon
     v-else
-    :component="icon"
+    :component="visual.icon"
     :size="size ?? 20"
     :color="isDir ? 'var(--accent)' : undefined"
   />

@@ -32,6 +32,7 @@ use crypto::get_setting;
 use error::{ApiError, ApiResult};
 use gopeed::{GopeedManager, GopeedSpawner};
 use tasks::TaskService;
+use util::{direct_client, resolve_path};
 
 pub const BASE_PORT: u16 = 17210;
 const PORT_TRIES: u16 = 20;
@@ -129,10 +130,7 @@ pub fn build_state(options: &StartOptions) -> ApiResult<Arc<AppState>> {
         )
     };
     // UC/OSS 直连，不读系统代理：与旧 Node(undici) 行为一致，避免本地代理规则干扰下载直链。
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .build()
-        .expect("reqwest client");
+    let client = direct_client();
     let update_gate = update_gate::UpdateGate::default();
     let tasks = TaskService::new(
         db.clone(),
@@ -213,17 +211,6 @@ async fn bind_port(base: u16, tries: u16) -> std::io::Result<(TcpListener, u16)>
         std::io::ErrorKind::AddrInUse,
         "没有可用端口",
     ))
-}
-
-fn resolve_path(raw: &str) -> PathBuf {
-    let path = PathBuf::from(raw);
-    if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(path)
-    }
 }
 
 /// 生产/开发环境解析 gopeed-web.exe 路径。

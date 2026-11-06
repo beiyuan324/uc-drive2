@@ -112,6 +112,20 @@ function selectNode(node: FileNode) {
   selectedId.value = node.id;
 }
 
+const fileActionOptions = [
+  { label: '打开所在目录', key: 'reveal' },
+  { label: '重命名', key: 'rename' },
+  { label: '移动', key: 'move' },
+  { label: '删除', key: 'delete' },
+];
+
+function handleFileAction(key: string, node: FileNode) {
+  if (key === 'reveal') return reveal(node);
+  if (key === 'rename') return openRename(node);
+  if (key === 'move') return openMove(node);
+  return confirmDelete(node);
+}
+
 // 新建目录
 const showNewDir = ref(false);
 const newDirName = ref('');
@@ -450,22 +464,8 @@ onActivated(() => files.refresh());
             </n-tooltip>
             <n-dropdown
               trigger="click"
-              :options="[
-                { label: '打开所在目录', key: 'reveal' },
-                { label: '重命名', key: 'rename' },
-                { label: '移动', key: 'move' },
-                { label: '删除', key: 'delete' },
-              ]"
-              @select="
-                (k: string) =>
-                  k === 'reveal'
-                    ? reveal(node)
-                    : k === 'rename'
-                      ? openRename(node)
-                      : k === 'move'
-                        ? openMove(node)
-                        : confirmDelete(node)
-              "
+              :options="fileActionOptions"
+              @select="(key: string) => handleFileAction(key, node)"
             >
               <n-button quaternary circle size="tiny" class="grid-action-btn" aria-label="更多操作">
                 <template #icon><n-icon :component="MoreIcon" size="14" /></template>
@@ -537,22 +537,8 @@ onActivated(() => files.refresh());
                 </n-tooltip>
                 <n-dropdown
                   trigger="click"
-                  :options="[
-                    { label: '打开所在目录', key: 'reveal' },
-                    { label: '重命名', key: 'rename' },
-                    { label: '移动', key: 'move' },
-                    { label: '删除', key: 'delete' },
-                  ]"
-                  @select="
-                    (k: string) =>
-                      k === 'reveal'
-                        ? reveal(node)
-                        : k === 'rename'
-                          ? openRename(node)
-                          : k === 'move'
-                            ? openMove(node)
-                            : confirmDelete(node)
-                  "
+                  :options="fileActionOptions"
+                  @select="(key: string) => handleFileAction(key, node)"
                 >
                   <n-button size="tiny" quaternary circle aria-label="更多操作" @click.stop>
                     <template #icon><n-icon :component="MoreIcon" /></template>
